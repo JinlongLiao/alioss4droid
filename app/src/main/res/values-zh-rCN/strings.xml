@@ -14,10 +14,20 @@
     <string name="common_share">分享</string>
     <string name="common_next">下一步</string>
     <string name="common_done">完成</string>
+    <string name="common_edit">编辑</string>
 
     <string name="nav_files">文件</string>
     <string name="nav_profiles">密钥</string>
     <string name="nav_settings">设置</string>
+
+    <string name="profiles_title">OSS 密钥管理</string>
+    <string name="profiles_add">新增配置</string>
+    <string name="profiles_empty">尚未配置任何 OSS 密钥，点击右下角添加。</string>
+    <string name="profiles_unnamed">(未命名)</string>
+    <string name="profiles_default_bucket">默认 bucket: %1$s</string>
+    <string name="profiles_default_bucket_any">默认 bucket: (未指定，进入后列出全部)</string>
+    <string name="profiles_delete_title">删除密钥配置</string>
+    <string name="profiles_delete_message">确定要删除「%1$s」吗？此操作只会删除本地配置，不会影响云端数据。</string>
 
     <string name="browser_title">OSS 浏览器</string>
     <string name="browser_loading">加载中…</string>
@@ -75,6 +85,11 @@
     <string name="confirm_execute">确认执行</string>
 
     <string name="settings_title">设置</string>
+    <string name="settings_section_profiles">OSS 配置（必填）</string>
+    <string name="settings_profiles_title">OSS 密钥 / 配置</string>
+    <string name="settings_profiles_active">当前: %1$s · 共 %2$d 条</string>
+    <string name="settings_profiles_not_activated">已保存 %1$d 条，尚未激活。点击选择一条激活。</string>
+    <string name="settings_profiles_none">尚未配置，点击添加你的第一条 OSS 密钥。</string>
     <string name="settings_section_appearance">外观</string>
     <string name="settings_section_browse">浏览</string>
     <string name="settings_section_preview">预览</string>

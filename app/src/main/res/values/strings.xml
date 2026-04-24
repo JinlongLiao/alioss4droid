@@ -15,11 +15,22 @@
     <string name="common_share">Share</string>
     <string name="common_next">Next</string>
     <string name="common_done">Done</string>
+    <string name="common_edit">Edit</string>
 
     <!-- Navigation -->
     <string name="nav_files">Files</string>
     <string name="nav_profiles">Keys</string>
     <string name="nav_settings">Settings</string>
+
+    <!-- Profiles -->
+    <string name="profiles_title">OSS Profiles</string>
+    <string name="profiles_add">Add profile</string>
+    <string name="profiles_empty">No OSS profile yet. Tap the + button to add one.</string>
+    <string name="profiles_unnamed">(Unnamed)</string>
+    <string name="profiles_default_bucket">Default bucket: %1$s</string>
+    <string name="profiles_default_bucket_any">Default bucket: (not set — all buckets listed)</string>
+    <string name="profiles_delete_title">Delete profile</string>
+    <string name="profiles_delete_message">Delete "%1$s"? This only removes the local profile and will not affect your cloud data.</string>
 
     <!-- Browser -->
     <string name="browser_title">OSS Browser</string>
@@ -82,6 +93,11 @@
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
+    <string name="settings_section_profiles">OSS Profile (required)</string>
+    <string name="settings_profiles_title">OSS Keys / Profiles</string>
+    <string name="settings_profiles_active">Active: %1$s · %2$d total</string>
+    <string name="settings_profiles_not_activated">%1$d profile(s) saved, none activated. Tap to activate one.</string>
+    <string name="settings_profiles_none">No profile configured yet. Tap to add your first OSS key.</string>
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_browse">Browse</string>
     <string name="settings_section_preview">Preview</string>

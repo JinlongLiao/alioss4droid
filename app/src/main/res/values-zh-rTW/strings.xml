@@ -14,10 +14,20 @@
     <string name="common_share">分享</string>
     <string name="common_next">下一步</string>
     <string name="common_done">完成</string>
+    <string name="common_edit">編輯</string>
 
     <string name="nav_files">檔案</string>
     <string name="nav_profiles">金鑰</string>
     <string name="nav_settings">設定</string>
+
+    <string name="profiles_title">OSS 金鑰管理</string>
+    <string name="profiles_add">新增配置</string>
+    <string name="profiles_empty">尚未設定任何 OSS 金鑰，點擊右下角新增。</string>
+    <string name="profiles_unnamed">(未命名)</string>
+    <string name="profiles_default_bucket">預設 bucket: %1$s</string>
+    <string name="profiles_default_bucket_any">預設 bucket: (未指定，進入後列出全部)</string>
+    <string name="profiles_delete_title">刪除金鑰配置</string>
+    <string name="profiles_delete_message">確定要刪除「%1$s」嗎？此操作只會刪除本機配置，不會影響雲端資料。</string>
 
     <string name="browser_title">OSS 瀏覽器</string>
     <string name="browser_loading">載入中…</string>
@@ -75,6 +85,11 @@
     <string name="confirm_execute">確認執行</string>
 
     <string name="settings_title">設定</string>
+    <string name="settings_section_profiles">OSS 配置（必填）</string>
+    <string name="settings_profiles_title">OSS 金鑰 / 配置</string>
+    <string name="settings_profiles_active">目前: %1$s · 共 %2$d 條</string>
+    <string name="settings_profiles_not_activated">已儲存 %1$d 條，尚未啟用。點擊選擇一條啟用。</string>
+    <string name="settings_profiles_none">尚未設定，點擊新增您的第一條 OSS 金鑰。</string>
     <string name="settings_section_appearance">外觀</string>
     <string name="settings_section_browse">瀏覽</string>
     <string name="settings_section_preview">預覽</string>

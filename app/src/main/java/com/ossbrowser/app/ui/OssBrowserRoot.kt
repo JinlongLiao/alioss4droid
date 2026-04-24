@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,6 +15,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import com.ossbrowser.app.OssBrowserApp
 import com.ossbrowser.app.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -50,11 +50,11 @@ fun OssBrowserRoot() {
 
     val settingsVm: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
     val settings by settingsVm.state.collectAsState()
+    val profileState by OssBrowserApp.instance.profileRepository.state.collectAsState()
     val context = LocalContext.current
 
-    val showBottomBar = currentRoute == Routes.BROWSER ||
-        currentRoute == Routes.PROFILES ||
-        currentRoute == Routes.SETTINGS
+    // 底部导航：只剩「文件 / 设置」。密钥管理作为设置页中优先级最高的入口呈现。
+    val showBottomBar = currentRoute == Routes.BROWSER || currentRoute == Routes.SETTINGS
 
     Scaffold(
         bottomBar = {
@@ -74,19 +74,10 @@ fun OssBrowserRoot() {
                         label = { Text(stringResource(R.string.nav_files)) }
                     )
                     NavigationBarItem(
-                        selected = backStack?.destination?.hierarchy?.any { it.route?.startsWith("profile") == true } == true,
-                        onClick = {
-                            if (currentRoute != Routes.PROFILES) {
-                                navController.navigate(Routes.PROFILES) {
-                                    launchSingleTop = true
-                                }
-                            }
-                        },
-                        icon = { Icon(Icons.Outlined.VpnKey, contentDescription = null) },
-                        label = { Text(stringResource(R.string.nav_profiles)) }
-                    )
-                    NavigationBarItem(
-                        selected = backStack?.destination?.hierarchy?.any { it.route?.startsWith("settings") == true } == true,
+                        selected = backStack?.destination?.hierarchy?.any {
+                            it.route?.startsWith("settings") == true ||
+                                it.route?.startsWith("profile") == true
+                        } == true,
                         onClick = {
                             if (currentRoute != Routes.SETTINGS) {
                                 navController.navigate(Routes.SETTINGS) {
@@ -113,6 +104,7 @@ fun OssBrowserRoot() {
             }
             composable(Routes.PROFILES) {
                 ProfileListScreen(
+                    onBack = { navController.popBackStack() },
                     onAdd = { navController.navigate(Routes.profileEdit(null)) },
                     onEdit = { id -> navController.navigate(Routes.profileEdit(id)) }
                 )
@@ -131,8 +123,11 @@ fun OssBrowserRoot() {
                             navController.navigate(Routes.BROWSER) { launchSingleTop = true }
                         }
                     },
+                    onOpenProfiles = { navController.navigate(Routes.PROFILES) },
                     onOpenPrivacy = { navController.navigate(Routes.SETTINGS_PRIVACY) },
                     onOpenLicenses = { navController.navigate(Routes.SETTINGS_LICENSES) },
+                    activeProfileName = profileState.active?.name,
+                    totalProfiles = profileState.profiles.size,
                     vm = settingsVm
                 )
             }

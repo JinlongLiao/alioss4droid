@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Brightness6
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -29,7 +30,11 @@ import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.TextSnippet
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,8 +69,11 @@ import java.io.File
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenProfiles: () -> Unit,
     onOpenPrivacy: () -> Unit,
     onOpenLicenses: () -> Unit,
+    activeProfileName: String? = null,
+    totalProfiles: Int = 0,
     vm: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
 ) {
     val settings by vm.state.collectAsState()
@@ -96,6 +104,15 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
+            // 密钥管理：设置页优先级最高的入口。醒目卡片突出显示当前激活项，未配置时以警示色提示。
+            SectionTitle(stringResource(R.string.settings_section_profiles))
+            ProfileEntryCard(
+                activeProfileName = activeProfileName,
+                totalProfiles = totalProfiles,
+                onClick = onOpenProfiles
+            )
+
+            SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_appearance))
             SettingRow(
                 icon = Icons.Outlined.Brightness6,
@@ -272,6 +289,74 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ProfileEntryCard(
+    activeProfileName: String?,
+    totalProfiles: Int,
+    onClick: () -> Unit
+) {
+    val hasActive = !activeProfileName.isNullOrBlank()
+    val containerColor = if (hasActive)
+        MaterialTheme.colorScheme.primaryContainer
+    else
+        MaterialTheme.colorScheme.errorContainer
+    val onContainer = if (hasActive)
+        MaterialTheme.colorScheme.onPrimaryContainer
+    else
+        MaterialTheme.colorScheme.onErrorContainer
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = containerColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (hasActive) Icons.Outlined.VpnKey else Icons.Outlined.WarningAmber,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = onContainer
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_profiles_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = onContainer,
+                    fontWeight = FontWeight.SemiBold
+                )
+                val subtitle = when {
+                    hasActive -> stringResource(
+                        R.string.settings_profiles_active, activeProfileName!!, totalProfiles
+                    )
+                    totalProfiles > 0 -> stringResource(
+                        R.string.settings_profiles_not_activated, totalProfiles
+                    )
+                    else -> stringResource(R.string.settings_profiles_none)
+                }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onContainer
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = onContainer
+            )
+        }
     }
 }
 
