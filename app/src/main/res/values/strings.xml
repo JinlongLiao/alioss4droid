@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OSS Browser</string>
+
+    <!-- Common -->
+    <string name="common_ok">OK</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_confirm">Confirm</string>
+    <string name="common_close">Close</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_back">Back</string>
+    <string name="common_save">Save</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_copy">Copy</string>
+    <string name="common_share">Share</string>
+    <string name="common_next">Next</string>
+    <string name="common_done">Done</string>
+
+    <!-- Navigation -->
+    <string name="nav_files">Files</string>
+    <string name="nav_profiles">Keys</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Browser -->
+    <string name="browser_title">OSS Browser</string>
+    <string name="browser_loading">Loading…</string>
+    <string name="browser_loading_buckets">Loading Buckets…</string>
+    <string name="browser_empty_buckets">No bucket under this account.</string>
+    <string name="browser_empty_folder">This folder is empty.</string>
+    <string name="browser_no_active_profile">Please add and activate an OSS profile on the Keys page first.</string>
+    <string name="browser_go_configure">Go to configure</string>
+    <string name="browser_jump_path">Jump to path</string>
+    <string name="browser_mkdir">New folder</string>
+    <string name="browser_upload">Upload</string>
+    <string name="browser_download">Download</string>
+    <string name="browser_preview">Preview</string>
+    <string name="browser_presign">Generate link</string>
+    <string name="browser_move">Move / Rename</string>
+    <string name="browser_goback_exit">Press back again to exit</string>
+
+    <!-- Task states -->
+    <string name="task_uploading">Uploading</string>
+    <string name="task_downloading">Downloading</string>
+    <string name="task_deleting">Deleting</string>
+    <string name="task_moving">Moving</string>
+    <string name="task_presigning">Generating link</string>
+    <string name="task_upload_done">Upload completed: %1$s</string>
+    <string name="task_upload_failed">Upload failed: %1$s</string>
+    <string name="task_download_done">Download completed: %1$s</string>
+    <string name="task_download_failed">Download failed: %1$s</string>
+    <string name="task_delete_done">Deleted: %1$s</string>
+    <string name="task_delete_failed">Delete failed: %1$s</string>
+    <string name="task_mkdir_done">Folder created: %1$s</string>
+    <string name="task_mkdir_failed">Create folder failed: %1$s</string>
+    <string name="task_move_done">Moved to: %1$s</string>
+    <string name="task_move_failed">Move failed: %1$s</string>
+    <string name="task_presign_failed">Generate link failed: %1$s</string>
+    <string name="task_preview_failed">Preview failed: %1$s</string>
+    <string name="task_preview_unsupported">Preview is not supported for this type. You can download it or use "Generate link".</string>
+    <string name="task_presign_invalid_hours">Expiration must be greater than 0 hours</string>
+    <string name="task_move_same_path">Source and destination are the same</string>
+
+    <!-- Preview -->
+    <string name="preview_pdf_failed">Failed to render PDF.</string>
+    <string name="preview_pdf_page">Page %1$d</string>
+    <string name="preview_copy_to_clipboard">Copied to clipboard</string>
+    <string name="preview_copy_link">Copied link</string>
+    <string name="preview_share_link">Share link</string>
+    <string name="preview_open_external">Open in external player</string>
+
+    <!-- Confirmations -->
+    <string name="confirm_delete_title">Confirm delete</string>
+    <string name="confirm_delete_folder">The folder "%1$s" and all its contents will be deleted recursively. Continue?</string>
+    <string name="confirm_delete_file">The file "%1$s" will be deleted. Continue?</string>
+    <string name="confirm_move_title">Confirm</string>
+    <string name="confirm_move_folder">About to move / rename the folder. All objects under it will be copied recursively.</string>
+    <string name="confirm_move_file">About to move / rename the file.</string>
+    <string name="confirm_move_source">Source:</string>
+    <string name="confirm_move_target">Target:</string>
+    <string name="confirm_back_edit">Back to edit</string>
+    <string name="confirm_execute">Execute</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_browse">Browse</string>
+    <string name="settings_section_preview">Preview</string>
+    <string name="settings_section_security">Security</string>
+    <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_about">About</string>
+
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">Follow system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">Follow system</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_zh_cn">简体中文</string>
+    <string name="settings_language_zh_tw">繁體中文</string>
+
+    <string name="settings_page_size">Items per page</string>
+    <string name="settings_page_size_value">%1$d per page</string>
+    <string name="settings_text_preview_max">Text preview max size</string>
+    <string name="settings_auto_play">Auto-play media</string>
+    <string name="settings_auto_play_desc">Start playback automatically when previewing</string>
+    <string name="settings_confirm_destructive">Confirm destructive actions</string>
+    <string name="settings_confirm_destructive_desc">Ask again before delete / move / rename</string>
+
+    <string name="settings_clear_cache">Clear preview cache</string>
+    <string name="settings_clear_cache_desc">Remove temporary files created by preview</string>
+    <string name="settings_clear_cache_confirm">Clear all preview cache (your keys and preferences will not be affected).</string>
+    <string name="settings_clear_cache_result">Cleared %1$s of cache</string>
+
+    <string name="settings_version">Version</string>
+    <string name="settings_project">Project homepage</string>
+    <string name="settings_licenses">Open source licenses</string>
+    <string name="settings_licenses_desc">Apache License 2.0 and third-party components</string>
+    <string name="settings_privacy">Privacy policy</string>
+    <string name="settings_privacy_desc">This app collects no personal data</string>
+
+    <!-- Privacy consent -->
+    <string name="privacy_consent_title">Welcome to %1$s</string>
+    <string name="privacy_consent_intro">Please read and accept the Privacy Policy before using the app. This app is fully open source, collects no personal data, and stores all OSS credentials encrypted on device.</string>
+    <string name="privacy_consent_accept">Accept and continue</string>
+    <string name="privacy_consent_reject">Decline and exit</string>
+</resources>

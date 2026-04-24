@@ -1,0 +1,47 @@
+# Android / Gradle / IDE build artifacts
+*.iml
+.gradle/
+.kotlin/
+build/
+out/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Per-module build folders
+app/build/
+app/release/
+**/build/
+
+# IntelliJ / Android Studio
+.idea/
+*.ipr
+*.iws
+
+# Local SDK path
+local.properties
+
+# Output / signing
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.keystore
+*.jks
+
+# OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs / temp
+*.log
+*.tmp
+*.swp
+*.bak
+
+# Kotlin / JVM
+hs_err_pid*
+replay_pid*

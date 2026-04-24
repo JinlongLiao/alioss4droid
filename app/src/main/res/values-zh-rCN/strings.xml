@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OSS 浏览器</string>
+
+    <string name="common_ok">确定</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_confirm">确认</string>
+    <string name="common_close">关闭</string>
+    <string name="common_refresh">刷新</string>
+    <string name="common_back">返回</string>
+    <string name="common_save">保存</string>
+    <string name="common_delete">删除</string>
+    <string name="common_copy">复制</string>
+    <string name="common_share">分享</string>
+    <string name="common_next">下一步</string>
+    <string name="common_done">完成</string>
+
+    <string name="nav_files">文件</string>
+    <string name="nav_profiles">密钥</string>
+    <string name="nav_settings">设置</string>
+
+    <string name="browser_title">OSS 浏览器</string>
+    <string name="browser_loading">加载中…</string>
+    <string name="browser_loading_buckets">加载 Bucket 列表中…</string>
+    <string name="browser_empty_buckets">该账号下没有 Bucket。</string>
+    <string name="browser_empty_folder">该目录为空。</string>
+    <string name="browser_no_active_profile">请先在「密钥」页新增并激活一个 OSS 配置。</string>
+    <string name="browser_go_configure">去配置</string>
+    <string name="browser_jump_path">跳转到路径</string>
+    <string name="browser_mkdir">新建目录</string>
+    <string name="browser_upload">上传</string>
+    <string name="browser_download">下载</string>
+    <string name="browser_preview">预览</string>
+    <string name="browser_presign">生成链接</string>
+    <string name="browser_move">移动 / 重命名</string>
+    <string name="browser_goback_exit">再按一次返回退出应用</string>
+
+    <string name="task_uploading">上传中</string>
+    <string name="task_downloading">下载中</string>
+    <string name="task_deleting">删除中</string>
+    <string name="task_moving">移动中</string>
+    <string name="task_presigning">生成链接中</string>
+    <string name="task_upload_done">上传完成: %1$s</string>
+    <string name="task_upload_failed">上传失败: %1$s</string>
+    <string name="task_download_done">下载完成: %1$s</string>
+    <string name="task_download_failed">下载失败: %1$s</string>
+    <string name="task_delete_done">已删除: %1$s</string>
+    <string name="task_delete_failed">删除失败: %1$s</string>
+    <string name="task_mkdir_done">目录已创建: %1$s</string>
+    <string name="task_mkdir_failed">创建目录失败: %1$s</string>
+    <string name="task_move_done">已移动到: %1$s</string>
+    <string name="task_move_failed">移动失败: %1$s</string>
+    <string name="task_presign_failed">生成链接失败: %1$s</string>
+    <string name="task_preview_failed">预览失败: %1$s</string>
+    <string name="task_preview_unsupported">暂不支持此类型的预览，可使用下载或「生成链接」。</string>
+    <string name="task_presign_invalid_hours">有效期必须大于 0 小时</string>
+    <string name="task_move_same_path">源路径与目标路径相同</string>
+
+    <string name="preview_pdf_failed">PDF 渲染失败。</string>
+    <string name="preview_pdf_page">第 %1$d 页</string>
+    <string name="preview_copy_to_clipboard">已复制到剪贴板</string>
+    <string name="preview_copy_link">已复制链接</string>
+    <string name="preview_share_link">分享链接</string>
+    <string name="preview_open_external">用外部播放器打开</string>
+
+    <string name="confirm_delete_title">确认删除</string>
+    <string name="confirm_delete_folder">将递归删除目录「%1$s」下的全部对象，是否继续？</string>
+    <string name="confirm_delete_file">将删除文件「%1$s」，是否继续？</string>
+    <string name="confirm_move_title">确认执行</string>
+    <string name="confirm_move_folder">即将移动 / 重命名目录，该操作会递归搬运目录下的全部对象。</string>
+    <string name="confirm_move_file">即将移动 / 重命名文件。</string>
+    <string name="confirm_move_source">源:</string>
+    <string name="confirm_move_target">目标:</string>
+    <string name="confirm_back_edit">返回修改</string>
+    <string name="confirm_execute">确认执行</string>
+
+    <string name="settings_title">设置</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_browse">浏览</string>
+    <string name="settings_section_preview">预览</string>
+    <string name="settings_section_security">安全</string>
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_section_about">关于</string>
+
+    <string name="settings_theme">主题模式</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+
+    <string name="settings_language">语言</string>
+    <string name="settings_language_system">跟随系统</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_zh_cn">简体中文</string>
+    <string name="settings_language_zh_tw">繁體中文</string>
+
+    <string name="settings_page_size">每页加载数量</string>
+    <string name="settings_page_size_value">%1$d 条 / 页</string>
+    <string name="settings_text_preview_max">文本预览大小上限</string>
+    <string name="settings_auto_play">自动播放音视频</string>
+    <string name="settings_auto_play_desc">进入预览后自动开始播放</string>
+    <string name="settings_confirm_destructive">破坏性操作二次确认</string>
+    <string name="settings_confirm_destructive_desc">删除 / 移动 / 重命名前需再次确认</string>
+
+    <string name="settings_clear_cache">清除预览缓存</string>
+    <string name="settings_clear_cache_desc">清空预览产生的临时文件</string>
+    <string name="settings_clear_cache_confirm">将清空应用内的临时缓存（不影响你的密钥与偏好设置）。</string>
+    <string name="settings_clear_cache_result">已清理 %1$s 缓存</string>
+
+    <string name="settings_version">版本</string>
+    <string name="settings_project">项目主页</string>
+    <string name="settings_licenses">开源许可</string>
+    <string name="settings_licenses_desc">Apache License 2.0 及第三方组件</string>
+    <string name="settings_privacy">隐私政策</string>
+    <string name="settings_privacy_desc">本应用不收集任何个人数据</string>
+
+    <string name="privacy_consent_title">欢迎使用 %1$s</string>
+    <string name="privacy_consent_intro">在开始使用前，请阅读并同意《隐私政策》。本应用完全开源，不收集任何个人数据；所有 OSS 密钥仅加密保存在本机。</string>
+    <string name="privacy_consent_accept">同意并继续</string>
+    <string name="privacy_consent_reject">拒绝并退出</string>
+</resources>

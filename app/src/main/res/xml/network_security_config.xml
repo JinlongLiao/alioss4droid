@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 全局默认：禁止明文 HTTP，只信任系统证书。 -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+      阿里云 OSS Android SDK 对 service 级请求（ListBuckets）默认使用
+      http://oss.aliyuncs.com（无法在 SDK 外配置 https）。所以这里
+      为 aliyuncs.com 及其子域打开明文白名单；OSS 请求本身带签名鉴权，
+      不会泄露 AK/SK，但对象内容确实走明文——若涉及敏感数据，
+      请使用 HTTPS 的 region endpoint，并仅依赖 bucket 级请求。
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">aliyuncs.com</domain>
+    </domain-config>
+</network-security-config>
