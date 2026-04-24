@@ -8,6 +8,34 @@ calendar-ish tags since no public release has been cut yet.
 
 ### Added
 
+- **DOCX preview** – `.docx` objects are now previewed in-app by unzipping the
+  file and parsing `word/document.xml` with a zero-dependency XmlPullParser
+  walker (`util/DocxText.kt`). Renders paragraph-by-paragraph with selectable
+  text and one-tap "copy all" in the preview top bar.
+- **Markdown preview toggle** – Markdown objects (`.md` / `.markdown` /
+  `.mdown` / `.mkd` / `.mkdn`) open with the in-app `MarkdownText` rich-text
+  renderer by default; the preview top bar offers a one-tap switch to the
+  monospace raw-source view.
+- **Friendlier preview states** – the preview dialog now distinguishes three
+  previously-swallowed cases: (1) a richer *loading* screen with the file
+  icon, filename, human-readable size and a live progress bar (PDF downloads
+  report real bytes via `downloadToFile`'s `onProgress`); (2) an in-dialog
+  *too large* guidance page that shows the current size / configured limit
+  and offers "Download to device" and "Generate temporary link" shortcuts
+  instead of silently firing a snackbar; (3) an in-dialog *error* page with
+  the actual failure message and a "Retry / Download / Close" triplet.
+  Backed by three new `PreviewState` variants (`Loading` now carries
+  `totalBytes`/`downloadedBytes`, plus new `TooLarge` and `Error`) and three
+  new composables (`LoadingPreviewBody`, `TooLargePreviewBody`,
+  `ErrorPreviewBody`).
+- **Markdown renderer coverage** – `ui/settings/MarkdownView.kt` extended from
+  the original minimal subset to a GFM-oriented feature set: H1–H6 (ATX +
+  Setext), nested lists, task lists `- [ ]` / `- [x]`, strikethrough `~~…~~`,
+  bold-italic `***…***`, GFM tables with alignment, block-level images
+  (`![alt](url)` via Coil), autolink `<http…>`, bare URL, `\X` escapes,
+  reference-style links (`[id]: url` + `[text][id]` / `[id]`), multi-line
+  blockquotes, trailing-`#` stripping, and hard line breaks from trailing
+  two spaces. Still single-file, still zero Markdown dependencies.
 - **OSS profile encrypted backup / restore** – Settings → *Backup & share* now supports
   one-tap export to a `.aloss` file (AES-256-GCM; optional PBKDF2 password) and import
   through Android SAF.

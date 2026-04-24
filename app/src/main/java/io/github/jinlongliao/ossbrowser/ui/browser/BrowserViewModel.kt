@@ -30,7 +30,9 @@ import io.github.jinlongliao.ossbrowser.oss.OssListCache
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.OssPreviewKind
 import io.github.jinlongliao.ossbrowser.oss.OssService
+import io.github.jinlongliao.ossbrowser.oss.isMarkdownFile
 import io.github.jinlongliao.ossbrowser.oss.previewKind
+import io.github.jinlongliao.ossbrowser.util.DocxText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +60,12 @@ class BrowserViewModel(
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+
+    /** 最近一次触发预览的 File；重试 / 超限后的「下载」「生成链接」按钮都依赖它。 */
+    private var lastPreviewItem: OssObjectItem.File? = null
+
+    /** 供 UI 读取当前预览对应的源文件，用于触发 SAF 下载 / 生成链接弹窗等复用流程。 */
+    fun currentPreviewItem(): OssObjectItem.File? = lastPreviewItem
 
     /**
      * 每次"首屏刷新"自增，用于丢弃过期的请求结果。
@@ -452,25 +460,49 @@ class BrowserViewModel(
 
     /**
      * 打开文件预览：
-     * - TEXT：下载到内存（大小上限由用户设置）→ 字符串
+     * - TEXT / DOCX：下载到内存（大小上限由用户设置）→ 字符串 / 段落
      * - IMAGE：生成 1 小时预签名 URL，由 UI 通过 Coil 加载
      * - AUDIO / VIDEO：生成 1 小时预签名 URL，内嵌 ExoPlayer 播放
-     * - PDF：下载到 cacheDir，UI 用 PdfRenderer 渲染
+     * - PDF：下载到 cacheDir，UI 用 PdfRenderer 渲染（带实时进度）
      * - UNSUPPORTED：提示不支持
+     *
+     * 失败或超限时保留弹窗并呈现友好界面（TooLarge / Error），而不是把消息闪给
+     * snackbar 后丢失上下文。
      */
     fun preview(item: OssObjectItem.File) {
         val bucket = _state.value.currentBucket ?: return
         val endpoint = _state.value.currentBucketEndpoint
         val kind = item.previewKind()
+        lastPreviewItem = item
         if (kind == OssPreviewKind.UNSUPPORTED) {
             _state.value = _state.value.copy(
                 task = TaskState.Failed(str(R.string.task_preview_unsupported))
             )
             return
         }
+        // 前置检查：TEXT / DOCX 走内存下载，若预计大小已超阈值就不尝试真正下载。
+        if ((kind == OssPreviewKind.TEXT || kind == OssPreviewKind.DOCX) &&
+            item.size > 0 && item.size > textPreviewMax
+        ) {
+            _state.value = _state.value.copy(
+                previewState = PreviewState.TooLarge(
+                    key = item.key,
+                    name = item.displayName,
+                    kind = kind,
+                    sizeBytes = item.size,
+                    limitBytes = textPreviewMax
+                )
+            )
+            return
+        }
         viewModelScope.launch {
             _state.value = _state.value.copy(
-                previewState = PreviewState.Loading(item.key, item.displayName, kind)
+                previewState = PreviewState.Loading(
+                    key = item.key,
+                    name = item.displayName,
+                    kind = kind,
+                    totalBytes = item.size
+                )
             )
             runCatching {
                 when (kind) {
@@ -484,7 +516,24 @@ class BrowserViewModel(
                         PreviewState.Text(
                             key = item.key,
                             name = item.displayName,
-                            content = bytes.toString(Charsets.UTF_8)
+                            content = bytes.toString(Charsets.UTF_8),
+                            isMarkdown = item.isMarkdownFile()
+                        )
+                    }
+                    OssPreviewKind.DOCX -> {
+                        // docx 是 ZIP；XML 解析后只需保留纯文本段落，所以复用文本预览上限即可。
+                        val bytes = service.downloadBytes(
+                            bucket = bucket,
+                            key = item.key,
+                            maxBytes = textPreviewMax,
+                            endpoint = endpoint
+                        )
+                        val paragraphs = DocxText.extractParagraphs(bytes)
+                            ?: throw IllegalStateException(str(R.string.preview_docx_failed))
+                        PreviewState.Docx(
+                            key = item.key,
+                            name = item.displayName,
+                            paragraphs = paragraphs
                         )
                     }
                     OssPreviewKind.IMAGE,
@@ -516,7 +565,19 @@ class BrowserViewModel(
                                 bucket = bucket,
                                 key = item.key,
                                 target = target,
-                                endpoint = endpoint
+                                endpoint = endpoint,
+                                onProgress = { read, total ->
+                                    // 只在当前预览仍指向该文件时回写进度，避免用户快速切换时错乱
+                                    val cur = _state.value.previewState
+                                    if (cur is PreviewState.Loading && cur.key == item.key) {
+                                        _state.value = _state.value.copy(
+                                            previewState = cur.copy(
+                                                totalBytes = if (total > 0) total else cur.totalBytes,
+                                                downloadedBytes = read
+                                            )
+                                        )
+                                    }
+                                }
                             )
                         }
                         PreviewState.Pdf(
@@ -528,19 +589,29 @@ class BrowserViewModel(
                     else -> null
                 }
             }.onSuccess { st ->
-                _state.value = _state.value.copy(previewState = st)
+                if (st != null) _state.value = _state.value.copy(previewState = st)
             }.onFailure { e ->
                 if (e is CancellationException) throw e
                 _state.value = _state.value.copy(
-                    previewState = null,
-                    task = TaskState.Failed(str(R.string.task_preview_failed, e.localizedMessage ?: e.toString()))
+                    previewState = PreviewState.Error(
+                        key = item.key,
+                        name = item.displayName,
+                        kind = kind,
+                        message = e.localizedMessage ?: e.toString()
+                    )
                 )
             }
         }
     }
 
+    /** 用户在「预览失败」界面点击重试。 */
+    fun retryPreview() {
+        lastPreviewItem?.let { preview(it) }
+    }
+
     fun closePreview() {
         _state.value = _state.value.copy(previewState = null)
+        lastPreviewItem = null
     }
 
     /** 生成带签名的临时下载链接；成功后通过 [presignResult] 推出，UI 可展示 / 复制 / 分享。 */
@@ -672,13 +743,19 @@ sealed class PreviewState {
     data class Loading(
         override val key: String,
         override val name: String,
-        val kind: OssPreviewKind
+        val kind: OssPreviewKind,
+        /** 对象总字节；0 表示未知。用于 Loading 界面展示预估大小与进度条。 */
+        val totalBytes: Long = 0L,
+        /** 已下载字节（仅 PDF 下载场景实时更新）。 */
+        val downloadedBytes: Long = 0L
     ) : PreviewState()
 
     data class Text(
         override val key: String,
         override val name: String,
-        val content: String
+        val content: String,
+        /** 若为 `true`，UI 可提供「源码 / 富文本」切换，默认以 Markdown 渲染。 */
+        val isMarkdown: Boolean = false
     ) : PreviewState()
 
     data class Image(
@@ -700,5 +777,32 @@ sealed class PreviewState {
         override val key: String,
         override val name: String,
         val filePath: String
+    ) : PreviewState()
+
+    /** DOCX 预览：应用内解析得到的段落列表，UI 以排版方式直接渲染。 */
+    data class Docx(
+        override val key: String,
+        override val name: String,
+        val paragraphs: List<String>
+    ) : PreviewState()
+
+    /**
+     * 文件大小超过预览上限，UI 展示友好引导页：给出大小 / 上限、
+     * 「下载到本地」「生成链接」「关闭」三枚动作。
+     */
+    data class TooLarge(
+        override val key: String,
+        override val name: String,
+        val kind: OssPreviewKind,
+        val sizeBytes: Long,
+        val limitBytes: Long
+    ) : PreviewState()
+
+    /** 预览失败，UI 展示具体错误并提供「重试」。 */
+    data class Error(
+        override val key: String,
+        override val name: String,
+        val kind: OssPreviewKind,
+        val message: String
     ) : PreviewState()
 }

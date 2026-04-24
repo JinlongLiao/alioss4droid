@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -56,14 +57,22 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.OpenInNew
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -123,6 +132,7 @@ import io.github.jinlongliao.ossbrowser.R
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.iconForFileName
+import io.github.jinlongliao.ossbrowser.ui.settings.MarkdownText
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsViewModel
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import java.text.DateFormat
@@ -524,7 +534,25 @@ fun BrowserScreen(
         PreviewDialog(
             state = ps,
             autoPlayMedia = settings.autoPlayMedia,
-            onDismiss = { vm.closePreview() }
+            onDismiss = { vm.closePreview() },
+            onRetry = { vm.retryPreview() },
+            onDownload = {
+                val file = vm.currentPreviewItem() ?: return@PreviewDialog
+                pendingDownload = file
+                vm.closePreview()
+                createFile.launch(
+                    Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_TITLE, file.displayName)
+                    }
+                )
+            },
+            onPresign = {
+                val file = vm.currentPreviewItem() ?: return@PreviewDialog
+                vm.closePreview()
+                dialog = BrowserDialog.Presign(file)
+            }
         )
     }
 }
@@ -1026,10 +1054,17 @@ private fun ConfirmMoveDialog(
 private fun PreviewDialog(
     state: PreviewState,
     autoPlayMedia: Boolean,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onDownload: () -> Unit,
+    onPresign: () -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    // 若预览对象是 Markdown，默认使用富文本渲染；用户可在顶栏切换到源码视图。
+    var renderMarkdown by remember(state.key) {
+        mutableStateOf(state is PreviewState.Text && state.isMarkdown)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1063,9 +1098,36 @@ private fun PreviewDialog(
                     actions = {
                         when (state) {
                             is PreviewState.Text -> {
+                                if (state.isMarkdown) {
+                                    val switchDesc = if (renderMarkdown) {
+                                        stringResource(R.string.preview_toggle_markdown_source)
+                                    } else {
+                                        stringResource(R.string.preview_toggle_markdown_rich)
+                                    }
+                                    IconButton(onClick = { renderMarkdown = !renderMarkdown }) {
+                                        Icon(
+                                            imageVector = if (renderMarkdown) Icons.Outlined.Code
+                                            else Icons.AutoMirrored.Outlined.Article,
+                                            contentDescription = switchDesc
+                                        )
+                                    }
+                                }
                                 val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
                                 IconButton(onClick = {
                                     clipboard.setText(AnnotatedString(state.content))
+                                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(
+                                        Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.common_copy)
+                                    )
+                                }
+                            }
+                            is PreviewState.Docx -> {
+                                val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
+                                IconButton(onClick = {
+                                    val merged = state.paragraphs.joinToString("\n")
+                                    clipboard.setText(AnnotatedString(merged))
                                     Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
                                 }) {
                                     Icon(
@@ -1116,19 +1178,25 @@ private fun PreviewDialog(
                                     }
                                 }
                             }
-                            is PreviewState.Pdf -> Unit
-                            is PreviewState.Loading -> Unit
+                            is PreviewState.Pdf,
+                            is PreviewState.Loading,
+                            is PreviewState.TooLarge,
+                            is PreviewState.Error -> Unit
                         }
                     }
                 )
                 Box(Modifier.fillMaxSize()) {
                     when (state) {
-                        is PreviewState.Loading -> Box(
-                            Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) { CircularProgressIndicator() }
+                        is PreviewState.Loading -> LoadingPreviewBody(state)
 
-                        is PreviewState.Text -> TextPreviewBody(content = state.content)
+                        is PreviewState.Text ->
+                            if (state.isMarkdown && renderMarkdown) {
+                                MarkdownPreviewBody(content = state.content)
+                            } else {
+                                TextPreviewBody(content = state.content)
+                            }
+
+                        is PreviewState.Docx -> DocxPreviewBody(paragraphs = state.paragraphs)
 
                         is PreviewState.Image -> ImagePreviewBody(url = state.url)
 
@@ -1140,6 +1208,20 @@ private fun PreviewDialog(
                         )
 
                         is PreviewState.Pdf -> PdfPreviewBody(filePath = state.filePath)
+
+                        is PreviewState.TooLarge -> TooLargePreviewBody(
+                            state = state,
+                            onDownload = onDownload,
+                            onPresign = onPresign,
+                            onClose = onDismiss
+                        )
+
+                        is PreviewState.Error -> ErrorPreviewBody(
+                            state = state,
+                            onRetry = onRetry,
+                            onDownload = onDownload,
+                            onClose = onDismiss
+                        )
                     }
                 }
             }
@@ -1163,6 +1245,255 @@ private fun TextPreviewBody(content: String) {
                     modifier = Modifier.padding(12.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MarkdownPreviewBody(content: String) {
+    SelectionContainer(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            MarkdownText(source = content)
+        }
+    }
+}
+
+@Composable
+private fun DocxPreviewBody(paragraphs: List<String>) {
+    if (paragraphs.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(stringResource(R.string.preview_docx_empty))
+        }
+        return
+    }
+    SelectionContainer(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(paragraphs.size) { idx ->
+                val para = paragraphs[idx]
+                if (para.isBlank()) {
+                    // 空段落保留视觉间距即可
+                    Box(Modifier.fillMaxWidth())
+                } else {
+                    Text(
+                        text = para,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 预览加载中态：大图标 + 文件名 + 预估大小 / 下载进度（PDF 实时更新）。
+ * 视觉上比单独的 CircularProgressIndicator 更稳妥，能明确告诉用户"正在拿什么"。
+ */
+@Composable
+private fun LoadingPreviewBody(state: PreviewState.Loading) {
+    val spec = remember(state.name) { iconForFileName(state.name) }
+    val downloaded = state.downloadedBytes
+    val total = state.totalBytes
+    val hasProgress = downloaded > 0 && total > 0
+    val fraction = if (hasProgress) (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = spec.icon,
+            contentDescription = null,
+            tint = spec.tint,
+            modifier = Modifier.size(72.dp)
+        )
+        Spacer(Modifier.size(16.dp))
+        Text(
+            state.name,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2
+        )
+        Spacer(Modifier.size(6.dp))
+        val sizeLabel = if (total > 0) FileUtils.humanSize(total)
+        else stringResource(R.string.preview_loading_size_unknown)
+        Text(
+            sizeLabel,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.size(24.dp))
+        if (hasProgress) {
+            LinearProgressIndicator(
+                progress = { fraction },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                stringResource(
+                    R.string.preview_loading_download,
+                    FileUtils.humanSize(downloaded),
+                    FileUtils.humanSize(total)
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.size(8.dp))
+            Text(
+                stringResource(R.string.preview_loading_fetching),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** 预览超限引导页：一个 Warn 图标 + 文件名 + 大小/上限 + 三个主要动作。 */
+@Composable
+private fun TooLargePreviewBody(
+    state: PreviewState.TooLarge,
+    onDownload: () -> Unit,
+    onPresign: () -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Inventory2,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.size(72.dp)
+        )
+        Spacer(Modifier.size(16.dp))
+        Text(
+            stringResource(R.string.preview_too_large_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            state.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2
+        )
+        Spacer(Modifier.size(12.dp))
+        Text(
+            stringResource(
+                R.string.preview_too_large_desc,
+                FileUtils.humanSize(state.sizeBytes),
+                FileUtils.humanSize(state.limitBytes)
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.size(24.dp))
+        Button(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Download, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.preview_action_download))
+        }
+        Spacer(Modifier.size(8.dp))
+        FilledTonalButton(onClick = onPresign, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Link, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.preview_action_presign))
+        }
+        Spacer(Modifier.size(8.dp))
+        OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.preview_action_close))
+        }
+    }
+}
+
+/** 预览失败引导页：告知错误并提供「重试 / 下载 / 关闭」。 */
+@Composable
+private fun ErrorPreviewBody(
+    state: PreviewState.Error,
+    onRetry: () -> Unit,
+    onDownload: () -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 32.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.ErrorOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(72.dp)
+        )
+        Spacer(Modifier.size(16.dp))
+        Text(
+            stringResource(R.string.preview_error_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.size(6.dp))
+        Text(
+            state.name,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2
+        )
+        Spacer(Modifier.size(12.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = state.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
+        Spacer(Modifier.size(8.dp))
+        Text(
+            stringResource(R.string.preview_error_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.size(24.dp))
+        Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Refresh, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.preview_action_retry))
+        }
+        Spacer(Modifier.size(8.dp))
+        FilledTonalButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Outlined.Download, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.preview_action_download))
+        }
+        Spacer(Modifier.size(8.dp))
+        OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.preview_action_close))
         }
     }
 }

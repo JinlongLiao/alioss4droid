@@ -22,12 +22,23 @@ enum class OssPreviewKind {
     AUDIO,
     VIDEO,
     PDF,
+    /** Word 文档（.docx），应用内解析 XML 抽取纯文本预览。 */
+    DOCX,
     UNSUPPORTED;
+}
+
+/** Markdown 扩展名，用于在文本预览中启用「富文本/源码」切换。 */
+private val MARKDOWN_EXTS: Set<String> = setOf("md", "markdown", "mdown", "mkd", "mkdn")
+
+/** 返回 true 表示文件名应以 Markdown 富文本形式渲染。 */
+fun OssObjectItem.File.isMarkdownFile(): Boolean {
+    val ext = displayName.lowercase().substringAfterLast('.', "")
+    return ext in MARKDOWN_EXTS
 }
 
 /** 文本型扩展名（包含源码、配置、日志等；不断补充，覆盖主流场景）。 */
 private val TEXT_EXTS: Set<String> = setOf(
-    "txt", "log", "md", "markdown", "rst", "tex", "adoc",
+    "txt", "log", "md", "markdown", "mdown", "mkd", "mkdn", "rst", "tex", "adoc",
     "json", "xml", "yaml", "yml", "toml", "ini", "conf", "cfg", "properties", "env", "plist",
     "csv", "tsv",
     "html", "htm", "xhtml", "css", "scss", "sass", "less",
@@ -55,6 +66,8 @@ private val VIDEO_EXTS: Set<String> = setOf(
 
 private val PDF_EXTS: Set<String> = setOf("pdf")
 
+private val DOCX_EXTS: Set<String> = setOf("docx")
+
 fun OssObjectItem.File.previewKind(): OssPreviewKind {
     val name = displayName.lowercase()
     val ext = name.substringAfterLast('.', "")
@@ -68,6 +81,7 @@ fun OssObjectItem.File.previewKind(): OssPreviewKind {
     }
     return when (ext) {
         in PDF_EXTS -> OssPreviewKind.PDF
+        in DOCX_EXTS -> OssPreviewKind.DOCX
         in TEXT_EXTS -> OssPreviewKind.TEXT
         in IMAGE_EXTS -> OssPreviewKind.IMAGE
         in AUDIO_EXTS -> OssPreviewKind.AUDIO

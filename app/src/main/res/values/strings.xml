@@ -143,6 +143,22 @@
     <string name="preview_audio_hint">Drag the seek bar to fast-forward / rewind</string>
     <string name="preview_no_player_app">No player app found</string>
     <string name="preview_choose_player">Choose player</string>
+    <string name="preview_toggle_markdown_rich">Render Markdown</string>
+    <string name="preview_toggle_markdown_source">Show raw text</string>
+    <string name="preview_docx_failed">Failed to parse DOCX (unsupported or corrupt file).</string>
+    <string name="preview_docx_empty">This document is empty.</string>
+    <string name="preview_loading_title">Loading preview…</string>
+    <string name="preview_loading_download">Downloaded %1$s / %2$s</string>
+    <string name="preview_loading_fetching">Fetching data, please wait…</string>
+    <string name="preview_loading_size_unknown">Size unknown</string>
+    <string name="preview_too_large_title">File too large to preview</string>
+    <string name="preview_too_large_desc">This file is %1$s, exceeding the in-app preview limit of %2$s. Download it or use a temporary link instead.</string>
+    <string name="preview_error_title">Preview failed</string>
+    <string name="preview_error_hint">You can retry, download the file, or close this dialog.</string>
+    <string name="preview_action_download">Download to device</string>
+    <string name="preview_action_presign">Generate temporary link</string>
+    <string name="preview_action_retry">Retry</string>
+    <string name="preview_action_close">Close</string>
 
     <!-- Confirmations -->
     <string name="confirm_delete_title">Confirm delete</string>

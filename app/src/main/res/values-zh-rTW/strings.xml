@@ -132,6 +132,22 @@
     <string name="preview_audio_hint">拖曳下方進度條可快進 / 後退</string>
     <string name="preview_no_player_app">找不到可用的播放器應用程式</string>
     <string name="preview_choose_player">選擇播放器</string>
+    <string name="preview_toggle_markdown_rich">以 Markdown 繪製</string>
+    <string name="preview_toggle_markdown_source">檢視原始碼</string>
+    <string name="preview_docx_failed">DOCX 解析失敗（不支援的格式或檔案損毀）。</string>
+    <string name="preview_docx_empty">此文件內容為空。</string>
+    <string name="preview_loading_title">正在載入預覽…</string>
+    <string name="preview_loading_download">已下載 %1$s / %2$s</string>
+    <string name="preview_loading_fetching">正在擷取資料，請稍候…</string>
+    <string name="preview_loading_size_unknown">大小未知</string>
+    <string name="preview_too_large_title">檔案過大，無法線上預覽</string>
+    <string name="preview_too_large_desc">此檔案 %1$s，超過應用程式內預覽上限 %2$s。可改為下載至本機檢視，或產生臨時連結交由其它應用程式開啟。</string>
+    <string name="preview_error_title">預覽失敗</string>
+    <string name="preview_error_hint">你可以重試、下載檔案或關閉此對話框。</string>
+    <string name="preview_action_download">下載到本機</string>
+    <string name="preview_action_presign">產生臨時連結</string>
+    <string name="preview_action_retry">重試</string>
+    <string name="preview_action_close">關閉</string>
 
     <string name="confirm_delete_title">確認刪除</string>
     <string name="confirm_delete_folder">將遞迴刪除目錄「%1$s」下的全部物件，是否繼續？</string>
