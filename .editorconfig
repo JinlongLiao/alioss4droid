@@ -1,6 +1,6 @@
 root = true
 
-# 通用默认
+# 通用默认：仓库统一 LF
 [*]
 charset = utf-8
 end_of_line = lf
@@ -35,8 +35,12 @@ indent_size = 2
 indent_size = 2
 end_of_line = lf
 
-# Windows 批处理
-[*.{bat,cmd}]
+# Windows 批处理 / PowerShell 默认也是 LF（与 .gitattributes 保持一致）
+[*.{bat,cmd,ps1}]
+end_of_line = lf
+
+# 唯一例外：发布签名脚本使用 CRLF
+[scripts/gen-release-keystore.ps1]
 end_of_line = crlf
 
 # Makefile 必须 tab

@@ -1,28 +1,29 @@
-# 默认文本按操作系统换行检出，提交时统一 LF
+# 仓库统一使用 LF 行尾，唯独 Windows PowerShell 生成签名脚本保持 CRLF。
 * text=auto eol=lf
 
-# Windows 脚本必须 CRLF
-*.bat     text eol=crlf
-*.cmd     text eol=crlf
-*.ps1     text eol=crlf
-
-# Shell / 构建脚本强制 LF
+# 默认所有脚本都走 LF
+*.bat     text eol=lf
+*.cmd     text eol=lf
+*.ps1     text eol=lf
 *.sh      text eol=lf
 gradlew   text eol=lf
 
+# 例外：发布签名脚本使用 CRLF（方便 Windows 下双击执行）
+scripts/gen-release-keystore.ps1 text eol=crlf
+
 # 明确的文本类型（避免被误判为二进制）
-*.kt      text
-*.kts     text
-*.java    text
-*.xml     text
-*.json    text
-*.yml     text
-*.yaml    text
-*.toml    text
-*.md      text
-*.properties text
-*.cfg     text
-*.ini     text
+*.kt      text eol=lf
+*.kts     text eol=lf
+*.java    text eol=lf
+*.xml     text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.toml    text eol=lf
+*.md      text eol=lf
+*.properties text eol=lf
+*.cfg     text eol=lf
+*.ini     text eol=lf
 
 # 源代码统计 / diff 行为
 *.md       linguist-detectable=true

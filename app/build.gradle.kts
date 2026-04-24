@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,27 +7,62 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// 从 keystore.properties 读取发布签名配置；文件不存在时跳过 release 签名（仍能出包但未签名）。
+// 文件格式请见 keystore.properties.sample。
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        keystorePropsFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { file(it).exists() } == true
+
 android {
-    namespace = "com.ossbrowser.app"
+    namespace = "io.github.jinlongliao.ossbrowser"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.ossbrowser.app"
+        applicationId = "io.github.jinlongliao.ossbrowser"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
 
         vectorDrawables { useSupportLibrary = true }
+
+        resourceConfigurations += listOf("en", "zh-rCN", "zh-rTW")
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

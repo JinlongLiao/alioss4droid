@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OSS Browser</string>
+    <string name="app_name">OSS Browser for Android</string>
+    <string name="app_brand">OSS Browser for Android</string>
+    <string name="app_description_short">Open-source Aliyun OSS client for Android</string>
 
     <!-- Common -->
     <string name="common_ok">OK</string>
@@ -16,6 +18,9 @@
     <string name="common_next">Next</string>
     <string name="common_done">Done</string>
     <string name="common_edit">Edit</string>
+    <string name="common_create">Create</string>
+    <string name="common_generate">Generate</string>
+    <string name="common_open_failed">Cannot open link</string>
 
     <!-- Navigation -->
     <string name="nav_files">Files</string>
@@ -32,22 +37,79 @@
     <string name="profiles_delete_title">Delete profile</string>
     <string name="profiles_delete_message">Delete "%1$s"? This only removes the local profile and will not affect your cloud data.</string>
 
+    <!-- Profile edit -->
+    <string name="profile_title_new">New OSS profile</string>
+    <string name="profile_title_edit">Edit OSS profile</string>
+    <string name="profile_field_name_required">Profile name *</string>
+    <string name="profile_field_endpoint_required">Endpoint (e.g. https://oss-cn-hangzhou.aliyuncs.com) *</string>
+    <string name="profile_field_bucket_optional">Default bucket (optional; empty lists all buckets)</string>
+    <string name="profile_field_ak_required">AccessKey ID *</string>
+    <string name="profile_field_sk_required">AccessKey Secret *</string>
+    <string name="profile_show_secret">Show Secret</string>
+    <string name="profile_hide_secret">Hide Secret</string>
+    <string name="profile_field_note">Note</string>
+    <string name="profile_save_and_activate">Save &amp; activate</string>
+
     <!-- Browser -->
     <string name="browser_title">OSS Browser</string>
     <string name="browser_loading">Loading…</string>
     <string name="browser_loading_buckets">Loading Buckets…</string>
     <string name="browser_empty_buckets">No bucket under this account.</string>
     <string name="browser_empty_folder">This folder is empty.</string>
+    <string name="browser_item_folder_label">Folder</string>
     <string name="browser_no_active_profile">Please add and activate an OSS profile on the Keys page first.</string>
+    <string name="browser_no_profile_title">No profile selected</string>
+    <string name="browser_no_profile_subtitle">Add and activate a profile on the Keys page</string>
+    <string name="browser_bucket_list_subtitle">Bucket list</string>
+    <string name="browser_bucket_subtitle">bucket: %1$s</string>
     <string name="browser_go_configure">Go to configure</string>
     <string name="browser_jump_path">Jump to path</string>
     <string name="browser_mkdir">New folder</string>
+    <string name="browser_mkdir_name_label">Folder name</string>
     <string name="browser_upload">Upload</string>
+    <string name="browser_upload_file">Upload file</string>
     <string name="browser_download">Download</string>
     <string name="browser_preview">Preview</string>
     <string name="browser_presign">Generate link</string>
     <string name="browser_move">Move / Rename</string>
     <string name="browser_goback_exit">Press back again to exit</string>
+    <string name="browser_fab_actions">Actions</string>
+    <string name="browser_error_prefix">⚠ %1$s (tap to dismiss)</string>
+    <string name="browser_load_more">Load more</string>
+    <string name="browser_all_loaded">— All loaded —</string>
+
+    <!-- Navigate path dialog -->
+    <string name="nav_path_title">Jump to path</string>
+    <string name="nav_path_label">Path relative to bucket</string>
+    <string name="nav_path_placeholder">dir1/sub/ or dir1/file.txt</string>
+    <string name="nav_path_help">• Ends with / → enter that directory\n• File path → jump to its parent folder and highlight\n• Empty → back to bucket root</string>
+    <string name="nav_path_confirm">Jump</string>
+
+    <!-- Presign -->
+    <string name="presign_dialog_title">Generate temporary link</string>
+    <string name="presign_file_label">File: %1$s</string>
+    <string name="presign_expire_label">Expiration (hours, 1–168)</string>
+    <string name="presign_expire_help">OSS presigned URLs are valid for up to 7 days (168 hours).</string>
+    <string name="presign_result_title">Temporary link generated</string>
+    <string name="presign_result_expire">Expires in %1$d hours</string>
+
+    <!-- Move -->
+    <string name="move_title_folder">Move / rename folder</string>
+    <string name="move_title_file">Move / rename file</string>
+    <string name="move_source_label">Source: %1$s</string>
+    <string name="move_dest_label">Target parent prefix (empty=root; e.g. dir1/sub/)</string>
+    <string name="move_name_label">Name</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_preview">Preview</string>
+    <string name="cd_presign">Generate link</string>
+    <string name="cd_download">Download</string>
+    <string name="cd_move_rename">Move / rename</string>
+    <string name="cd_delete">Delete</string>
+    <string name="cd_keys">Keys</string>
+    <string name="cd_copy">Copy</string>
+    <string name="cd_copy_link">Copy link</string>
+    <string name="cd_open_external">Open in external player</string>
 
     <!-- Task states -->
     <string name="task_uploading">Uploading</string>
@@ -78,6 +140,9 @@
     <string name="preview_copy_link">Copied link</string>
     <string name="preview_share_link">Share link</string>
     <string name="preview_open_external">Open in external player</string>
+    <string name="preview_audio_hint">Drag the seek bar to fast-forward / rewind</string>
+    <string name="preview_no_player_app">No player app found</string>
+    <string name="preview_choose_player">Choose player</string>
 
     <!-- Confirmations -->
     <string name="confirm_delete_title">Confirm delete</string>
@@ -103,6 +168,7 @@
     <string name="settings_section_preview">Preview</string>
     <string name="settings_section_security">Security</string>
     <string name="settings_section_storage">Storage</string>
+    <string name="settings_section_backup">Backup &amp; share</string>
     <string name="settings_section_about">About</string>
 
     <string name="settings_theme">Theme</string>
@@ -129,10 +195,37 @@
     <string name="settings_clear_cache_confirm">Clear all preview cache (your keys and preferences will not be affected).</string>
     <string name="settings_clear_cache_result">Cleared %1$s of cache</string>
 
+    <!-- Backup / export / import -->
+    <string name="settings_export_profiles">Export OSS profiles</string>
+    <string name="settings_export_profiles_desc">Encrypted bundle; decodable only by this app</string>
+    <string name="settings_import_profiles">Import OSS profiles</string>
+    <string name="settings_import_profiles_desc">Restore previously exported profiles</string>
+    <string name="export_dialog_title">Export OSS profiles</string>
+    <string name="export_dialog_intro">Profiles will be encrypted with AES-256-GCM and written to a file you pick. Other apps cannot decode it.</string>
+    <string name="export_password_label">Password (optional)</string>
+    <string name="export_password_help">Leave blank: uses the app built-in key. Any install of this app can import it.\nWith a password: both ends must enter the same password (recommended for sharing across users).</string>
+    <string name="export_nothing">No profile to export yet.</string>
+    <string name="export_default_name">oss-browser-profiles-%1$s.aloss</string>
+    <string name="export_success">Exported %1$d profile(s)</string>
+    <string name="export_failed">Export failed: %1$s</string>
+    <string name="import_dialog_title">Import OSS profiles</string>
+    <string name="import_dialog_intro">Select a previously exported .aloss file to decrypt and merge into your profiles.</string>
+    <string name="import_password_label">Password (leave blank for app key)</string>
+    <string name="import_pick">Select file…</string>
+    <string name="import_success">Imported %1$d new · updated %2$d</string>
+    <string name="import_failed">Import failed: %1$s</string>
+    <string name="import_bad_format">Invalid or corrupted backup file.</string>
+    <string name="import_wrong_password">Wrong password, or this file was exported with a password.</string>
+
     <string name="settings_version">Version</string>
+    <string name="settings_author">Author</string>
+    <string name="settings_author_name">jinlongliao</string>
+    <string name="settings_author_desc">GitHub · https://github.com/JinlongLiao/</string>
     <string name="settings_project">Project homepage</string>
     <string name="settings_licenses">Open source licenses</string>
     <string name="settings_licenses_desc">Apache License 2.0 and third-party components</string>
+    <string name="settings_licenses_project_section">Project license</string>
+    <string name="settings_licenses_third_party_section">Third-party components</string>
     <string name="settings_privacy">Privacy policy</string>
     <string name="settings_privacy_desc">This app collects no personal data</string>
 

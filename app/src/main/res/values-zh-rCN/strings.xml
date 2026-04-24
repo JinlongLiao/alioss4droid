@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OSS 浏览器</string>
+    <string name="app_name">OSS Browser for Android</string>
+    <string name="app_brand">OSS Browser for Android</string>
+    <string name="app_description_short">开源的阿里云 OSS 安卓客户端</string>
 
     <string name="common_ok">确定</string>
     <string name="common_cancel">取消</string>
@@ -15,6 +17,9 @@
     <string name="common_next">下一步</string>
     <string name="common_done">完成</string>
     <string name="common_edit">编辑</string>
+    <string name="common_create">创建</string>
+    <string name="common_generate">生成</string>
+    <string name="common_open_failed">无法打开链接</string>
 
     <string name="nav_files">文件</string>
     <string name="nav_profiles">密钥</string>
@@ -29,21 +34,73 @@
     <string name="profiles_delete_title">删除密钥配置</string>
     <string name="profiles_delete_message">确定要删除「%1$s」吗？此操作只会删除本地配置，不会影响云端数据。</string>
 
+    <string name="profile_title_new">新增 OSS 配置</string>
+    <string name="profile_title_edit">编辑 OSS 配置</string>
+    <string name="profile_field_name_required">配置名称 *</string>
+    <string name="profile_field_endpoint_required">Endpoint（如 https://oss-cn-hangzhou.aliyuncs.com） *</string>
+    <string name="profile_field_bucket_optional">默认 Bucket（可选，留空则进入后显示全部 Bucket）</string>
+    <string name="profile_field_ak_required">AccessKey ID *</string>
+    <string name="profile_field_sk_required">AccessKey Secret *</string>
+    <string name="profile_show_secret">显示 Secret</string>
+    <string name="profile_hide_secret">隐藏 Secret</string>
+    <string name="profile_field_note">备注</string>
+    <string name="profile_save_and_activate">保存并激活</string>
+
     <string name="browser_title">OSS 浏览器</string>
     <string name="browser_loading">加载中…</string>
     <string name="browser_loading_buckets">加载 Bucket 列表中…</string>
     <string name="browser_empty_buckets">该账号下没有 Bucket。</string>
     <string name="browser_empty_folder">该目录为空。</string>
+    <string name="browser_item_folder_label">目录</string>
     <string name="browser_no_active_profile">请先在「密钥」页新增并激活一个 OSS 配置。</string>
+    <string name="browser_no_profile_title">未选择配置</string>
+    <string name="browser_no_profile_subtitle">请先在「密钥」页新建并激活</string>
+    <string name="browser_bucket_list_subtitle">Bucket 列表</string>
+    <string name="browser_bucket_subtitle">bucket: %1$s</string>
     <string name="browser_go_configure">去配置</string>
     <string name="browser_jump_path">跳转到路径</string>
     <string name="browser_mkdir">新建目录</string>
+    <string name="browser_mkdir_name_label">目录名</string>
     <string name="browser_upload">上传</string>
+    <string name="browser_upload_file">上传文件</string>
     <string name="browser_download">下载</string>
     <string name="browser_preview">预览</string>
     <string name="browser_presign">生成链接</string>
     <string name="browser_move">移动 / 重命名</string>
     <string name="browser_goback_exit">再按一次返回退出应用</string>
+    <string name="browser_fab_actions">操作</string>
+    <string name="browser_error_prefix">⚠ %1$s（点此关闭）</string>
+    <string name="browser_load_more">加载更多</string>
+    <string name="browser_all_loaded">— 已全部加载 —</string>
+
+    <string name="nav_path_title">跳转到路径</string>
+    <string name="nav_path_label">相对 bucket 的路径</string>
+    <string name="nav_path_placeholder">dir1/sub/ 或 dir1/file.txt</string>
+    <string name="nav_path_help">• 以 / 结尾 → 进入该目录\n• 文件路径 → 跳到其所在目录并定位该文件\n• 留空 → 回到 bucket 根</string>
+    <string name="nav_path_confirm">跳转</string>
+
+    <string name="presign_dialog_title">生成临时下载链接</string>
+    <string name="presign_file_label">文件: %1$s</string>
+    <string name="presign_expire_label">有效期（小时，1~168）</string>
+    <string name="presign_expire_help">OSS 预签名链接上限为 7 天（168 小时）。</string>
+    <string name="presign_result_title">临时链接已生成</string>
+    <string name="presign_result_expire">有效期 %1$d 小时</string>
+
+    <string name="move_title_folder">移动目录 / 重命名</string>
+    <string name="move_title_file">移动文件 / 重命名</string>
+    <string name="move_source_label">源: %1$s</string>
+    <string name="move_dest_label">目标父目录前缀（空=根，示例：dir1/sub/）</string>
+    <string name="move_name_label">名称</string>
+
+    <string name="cd_preview">预览</string>
+    <string name="cd_presign">生成链接</string>
+    <string name="cd_download">下载</string>
+    <string name="cd_move_rename">移动 / 重命名</string>
+    <string name="cd_delete">删除</string>
+    <string name="cd_keys">密钥</string>
+    <string name="cd_copy">复制</string>
+    <string name="cd_copy_link">复制链接</string>
+    <string name="cd_open_external">用外部播放器打开</string>
 
     <string name="task_uploading">上传中</string>
     <string name="task_downloading">下载中</string>
@@ -72,6 +129,9 @@
     <string name="preview_copy_link">已复制链接</string>
     <string name="preview_share_link">分享链接</string>
     <string name="preview_open_external">用外部播放器打开</string>
+    <string name="preview_audio_hint">拖动下方进度条可快进 / 后退</string>
+    <string name="preview_no_player_app">未找到可用的播放器应用</string>
+    <string name="preview_choose_player">选择播放器</string>
 
     <string name="confirm_delete_title">确认删除</string>
     <string name="confirm_delete_folder">将递归删除目录「%1$s」下的全部对象，是否继续？</string>
@@ -95,6 +155,7 @@
     <string name="settings_section_preview">预览</string>
     <string name="settings_section_security">安全</string>
     <string name="settings_section_storage">存储</string>
+    <string name="settings_section_backup">备份与共享</string>
     <string name="settings_section_about">关于</string>
 
     <string name="settings_theme">主题模式</string>
@@ -121,10 +182,36 @@
     <string name="settings_clear_cache_confirm">将清空应用内的临时缓存（不影响你的密钥与偏好设置）。</string>
     <string name="settings_clear_cache_result">已清理 %1$s 缓存</string>
 
+    <string name="settings_export_profiles">导出 OSS 配置</string>
+    <string name="settings_export_profiles_desc">加密文件，仅本应用可解码</string>
+    <string name="settings_import_profiles">导入 OSS 配置</string>
+    <string name="settings_import_profiles_desc">从之前导出的备份文件恢复</string>
+    <string name="export_dialog_title">导出 OSS 配置</string>
+    <string name="export_dialog_intro">配置会使用 AES-256-GCM 加密保存到你选择的文件，其他应用无法解码。</string>
+    <string name="export_password_label">加密密码（可选）</string>
+    <string name="export_password_help">留空：使用应用内置密钥，任何安装本应用的设备都可导入。\n设置密码：导入时必须输入相同密码（推荐跨账号分享时使用）。</string>
+    <string name="export_nothing">当前没有可导出的配置。</string>
+    <string name="export_default_name">oss-browser-profiles-%1$s.aloss</string>
+    <string name="export_success">已导出 %1$d 条配置</string>
+    <string name="export_failed">导出失败: %1$s</string>
+    <string name="import_dialog_title">导入 OSS 配置</string>
+    <string name="import_dialog_intro">选择之前导出的 .aloss 文件，解密后合并到当前配置列表。</string>
+    <string name="import_password_label">密码（空白表示使用应用密钥）</string>
+    <string name="import_pick">选择文件…</string>
+    <string name="import_success">新增 %1$d 条 · 更新 %2$d 条</string>
+    <string name="import_failed">导入失败: %1$s</string>
+    <string name="import_bad_format">文件格式不正确或已损坏。</string>
+    <string name="import_wrong_password">密码错误，或该文件使用了密码加密。</string>
+
     <string name="settings_version">版本</string>
+    <string name="settings_author">作者</string>
+    <string name="settings_author_name">jinlongliao</string>
+    <string name="settings_author_desc">GitHub · https://github.com/JinlongLiao/</string>
     <string name="settings_project">项目主页</string>
     <string name="settings_licenses">开源许可</string>
     <string name="settings_licenses_desc">Apache License 2.0 及第三方组件</string>
+    <string name="settings_licenses_project_section">本项目许可</string>
+    <string name="settings_licenses_third_party_section">第三方组件</string>
     <string name="settings_privacy">隐私政策</string>
     <string name="settings_privacy_desc">本应用不收集任何个人数据</string>
 

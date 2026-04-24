@@ -29,6 +29,7 @@ local.properties
 *.class
 *.keystore
 *.jks
+keystore.properties
 
 # OS generated
 .DS_Store

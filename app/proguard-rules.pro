@@ -7,10 +7,10 @@
 # Kotlinx serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.SerializationKt
--keep,includedescriptorclasses class com.ossbrowser.app.**$$serializer { *; }
--keepclassmembers class com.ossbrowser.app.** {
+-keep,includedescriptorclasses class io.github.jinlongliao.ossbrowser.**$$serializer { *; }
+-keepclassmembers class io.github.jinlongliao.ossbrowser.** {
     *** Companion;
 }
--keepclasseswithmembers class com.ossbrowser.app.** {
+-keepclasseswithmembers class io.github.jinlongliao.ossbrowser.** {
     kotlinx.serialization.KSerializer serializer(...);
 }

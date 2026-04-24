@@ -26,5 +26,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OssBrowser"
+rootProject.name = "alioss4droid"
 include(":app")

@@ -1,0 +1,38 @@
+<!--
+  Copyright (C) 2026 jinlongliao
+  Licensed under the Apache License, Version 2.0.
+  ~
+  ~ Android 13+ 主题化图标（themed icon）用。系统会忽略填充色、
+  ~ 统一染成用户壁纸派生的主题色，所以这里只保留「形」：
+  ~ 云 + 中间的双向箭头，用并集路径，让主题色做视觉差异。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 云轮廓（描边），中心镂空出箭头 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,76
+C24,76 22,62 32,57
+C30,46 42,41 50,46
+C53,34 70,32 76,44
+C89,45 90,61 78,64
+C82,74 74,80 64,76 Z
+
+M54,40
+L65,52
+L59,52
+L59,62
+L65,62
+L54,74
+L43,62
+L49,62
+L49,52
+L43,52
+Z"
+        android:fillType="evenOdd" />
+
+</vector>

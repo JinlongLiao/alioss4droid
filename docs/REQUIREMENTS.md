@@ -1,103 +1,80 @@
-# 需求文档（PRD）
+# Requirements (PRD)
 
-> 文档版本：v1.0 · 最后更新：2026-04-24
-> 项目代号：**OSS Browser (Android)**
+> Language / 语言：**English** · [简体中文](REQUIREMENTS.zh-CN.md)
 
-## 1. 背景与目标
+> **App**: OSS Browser for Android  ·  **Author**: [jinlongliao](https://github.com/JinlongLiao/)  ·  **Repo**: <https://github.com/JinlongLiao/alioss4droid>  ·  **License**: [Apache License 2.0](../LICENSE)  ·  **Application ID**: `io.github.jinlongliao.ossbrowser`
 
-PC / Web 版 [aliyun/oss-browser](https://github.com/aliyun/oss-browser) 使用广泛，但移动端官方只提供"控制台 App"，重在账号/资源管理，文件浏览体验不佳。
+> Document version: v1.1 · Last updated: 2026-04-24
 
-本项目在 Android 上复刻并简化 PC 版的核心体验：
+## 1. Background
 
-- 在手机上**快速浏览 OSS 目录结构 / 对象信息**
-- 支持**多密钥、多 Bucket**
-- 覆盖最常用的**文件操作**：上传、下载、删除、移动 / 重命名、生成预签名链接
-- 支持**原位预览**（文本、图片、音视频、PDF）避免频繁下载
-- 兼顾**安全合规**：密钥本地加密、隐私政策透明、无第三方埋点
+Aliyun provides [`aliyun/oss-browser`](https://github.com/aliyun/oss-browser) as a cross-platform
+desktop GUI. There is no first-party Android app with the same set of features, so power users
+need a phone-friendly way to inspect buckets, share links, and retrieve files from OSS while on
+the go. **OSS Browser for Android** aims to fill this gap.
 
-## 2. 角色
+## 2. Target users
 
-- **终端用户（开发者 / 运维 / 内容运营）**：在手机上登录自己的阿里云 RAM 子账号 AK/SK 操作 OSS。
-- **隐私合规审阅人**：确认本应用的数据收集与传输行为合规。
+- OSS power users / SRE / backend developers who need bucket access from a phone.
+- QA / product owners who need to pull sample files or share presigned URLs on mobile.
+- Individuals managing personal OSS buckets (photo backups, media library, etc.).
 
-## 3. 功能需求
+## 3. Scope
 
-### F1 密钥管理
-| 编号 | 需求 |
+### 3.1 Must have
+
+| # | Capability |
 | --- | --- |
-| F1.1 | 新增 / 编辑 / 删除 OSS 配置，字段：名称、Endpoint、默认 Bucket（可选）、AccessKey ID、Secret |
-| F1.2 | 同时保存多套配置，随时一键切换当前激活项 |
-| F1.3 | 密钥采用 `EncryptedSharedPreferences`（AES-256-GCM）加密落盘 |
-| F1.4 | 对激活态的配置自动执行一次 `ListBuckets`，验证可用性 |
+| R1 | Manage N independent OSS profiles (AK/SK + Endpoint) with one active at a time. |
+| R2 | List buckets under the active account; enter any bucket regardless of the "default bucket" field. |
+| R3 | List objects inside a bucket / prefix with **lazy pagination** (10/page default, configurable). |
+| R4 | Breadcrumb / go-up navigation; gesture-back mapped to "parent folder"; bucket-list-level back requires a double tap. |
+| R5 | Upload files via SAF with progress; download via `CREATE_DOCUMENT`. |
+| R6 | Delete / move / rename with recursive handling for folders; destructive confirm configurable. |
+| R7 | Generate presigned URLs with hour-level expiration (1–168h), copyable & shareable. |
+| R8 | Preview text (txt/json/xml/yaml/md/groovy/gradle/…), images (incl. gif), audio/video, PDF. |
+| R9 | Local cache for listings (30-minute TTL in memory + disk), manual refresh forces network. |
+| R10 | i18n: English, Simplified Chinese, Traditional Chinese; follow-system + in-app override. |
+| R11 | Privacy policy consent gate on first launch; settings expose policy + OSS notice. |
+| R12 | Credentials stored encrypted via `EncryptedSharedPreferences`. |
+| R13 | **Encrypted backup**: export / import OSS profiles as a single file (AES‑256‑GCM). |
 
-### F2 浏览 / 文件操作
-| 编号 | 需求 |
+### 3.2 Nice to have / roadmap
+
+| # | Capability |
 | --- | --- |
-| F2.1 | 空 Bucket 字段也可使用，拉取当前账号所有可访问 Bucket 列表 |
-| F2.2 | 进入任一 Bucket，按 `/` 作为分隔符显示目录与对象 |
-| F2.3 | 支持面包屑、返回父目录 |
-| F2.4 | **分页懒加载**：每页默认 10（可调 10 / 20 / 50 / 100），滚动至底部自动拉取下一页 |
-| F2.5 | **排序规则**：目录优先，目录 / 文件各自按显示名不区分大小写升序 |
-| F2.6 | 跨 Region 的 Bucket 能正确使用 `extranetEndpoint` 访问（避免 307 重定向错误） |
-| F2.7 | 上传：SAF 选择任意文件；带进度 |
-| F2.8 | 下载：SAF `CREATE_DOCUMENT` 选择保存位置；带进度 |
-| F2.9 | 删除：支持文件，支持"目录"（递归搬运） |
-| F2.10 | 移动 / 重命名：支持文件和目录；目录为 `copy + delete` 递归 |
-| F2.11 | 新建目录：以 `foo/` 空对象表示 |
-| F2.12 | 生成预签名 URL：用户输入有效期（小时），支持复制 / 分享 |
-| F2.13 | **路径跳转**：输入相对 key 可直接跳到文件的父目录并高亮该文件；若 key 不存在则当作目录进入 |
-| F2.14 | **返回手势**：目录下返回父目录；Bucket 列表下连按两次返回退出应用 |
+| N1 | Resumable / multipart upload (`ResumableUploadRequest`). |
+| N2 | Multi-select batch delete / move / download. |
+| N3 | Object ACL / storage class editing. |
+| N4 | STS temporary credentials. |
+| N5 | QR code for presigned URLs; bulk export of multiple links. |
 
-### F3 预览
-| 编号 | 需求 |
-| --- | --- |
-| F3.1 | TEXT：文本 / 源码 / 配置文件（含 `groovy`、`xml`、`yaml`、`json`、`kt` 等），下载到内存展示；上限可配置（默认 2 MB） |
-| F3.2 | IMAGE：常见位图及 GIF，基于 Coil |
-| F3.3 | AUDIO：MP3 / AAC / WAV / FLAC / OPUS / 等，内嵌 ExoPlayer 播放器 |
-| F3.4 | VIDEO：MP4 / MKV / WEBM / 等，内嵌 ExoPlayer，支持暂停 / 快进 / 进度条 |
-| F3.5 | PDF：下载到 cacheDir 后用 `PdfRenderer` 分页渲染 |
-| F3.6 | UNSUPPORTED：提示"不支持该格式"，引导用户使用下载或生成链接 |
-| F3.7 | 自动播放音视频可在设置中关闭 |
+### 3.3 Out of scope (v1)
 
-### F4 设置
-| 编号 | 需求 |
-| --- | --- |
-| F4.1 | 主题模式：跟随系统 / 浅色 / 深色 |
-| F4.2 | 语言：跟随系统 / 英文 / 简体中文 / 繁体中文；不支持的系统语种回退到英文 |
-| F4.3 | 每页加载数量（10 / 20 / 50 / 100） |
-| F4.4 | 文本预览大小上限（512 KB / 2 MB / 5 MB / 10 MB） |
-| F4.5 | 自动播放音视频开关 |
-| F4.6 | 破坏性操作二次确认开关（删除 / 移动 / 重命名） |
-| F4.7 | 清除预览缓存 |
-| F4.8 | 关于：版本号、项目主页、开源许可、隐私政策 |
+- Server-side OSS administration (bucket creation, policy, CORS, static website config).
+- Third-party S3-compatible endpoints (design is generic but not validated).
+- Background / batch download queue with retry.
 
-### F5 开源 / 合规
-| 编号 | 需求 |
-| --- | --- |
-| F5.1 | 首次启动强制展示隐私政策；未同意则拒绝进入应用 |
-| F5.2 | 设置 → 隐私政策：可随时查看完整文本 |
-| F5.3 | 设置 → 开源许可：项目本体 Apache-2.0；列出全部第三方组件名称 / 许可 / 仓库地址 |
-| F5.4 | 本项目源码 Apache-2.0 开源，不集成任何第三方统计 / 崩溃 / 广告 SDK |
+## 4. Non-functional requirements
 
-### F6 国际化
-| 编号 | 需求 |
-| --- | --- |
-| F6.1 | 所有面向用户的文案走 `strings.xml` 资源，英文为缺省 |
-| F6.2 | 提供 `values-zh-rCN`、`values-zh-rTW` 资源 |
-| F6.3 | 语言切换立即生效（通过 `recreate()` 重建 Activity），无需重启进程 |
+- **Security**: No network traffic leaves the device except to Aliyun endpoints. AK/SK encrypted
+  at rest. Cleartext HTTP permitted only for `*.aliyuncs.com` subdomains.
+- **Performance**: Cache-first design so folder navigation is ≤100 ms for cached prefixes.
+- **Compatibility**: `minSdk = 26` (Android 8.0) for adaptive icons; `targetSdk = 34`.
+- **Localization parity**: all user-visible strings defined in `strings.xml` (no hardcoded
+  Chinese/English inside Kotlin).
+- **Offline tolerance**: stale cache rendered with a manual refresh hint instead of infinite spinner.
 
-## 4. 非功能需求
+## 5. Key UX principles
 
-- **性能**：首屏加载 ≤ 2 s（网络良好时），滚动 60 FPS；单目录百级对象不卡顿
-- **兼容**：`minSdk = 26`，`targetSdk = 34+`
-- **安全**：无任何本地数据出站（除 OSS HTTPS 请求本身）；密钥仅落盘在应用私有目录
-- **可观测**：所有 OSS 异常以 `errorMessage` / `TaskState.Failed` 呈现到 UI，不吞错
-- **可用性**：网络慢或权限不足时，"加载中…"提示可手动取消
+1. "Files" is the primary tab — keep it one tap away.
+2. Irreversible operations always ask twice unless explicitly disabled.
+3. Progress must always be visible (upload/download bars, pagination spinner).
+4. Credentials are **never** shown in logs, toasts, or crash reports.
+5. Language switching happens in-place; avoid restarting the process.
 
-## 5. 不在本期范围
+## 6. Success metrics
 
-- 断点续传 / 分片上传
-- 对象 ACL 变更、Storage Class 管理
-- 批量多选操作
-- STS 临时凭证接入
-- Windows / iOS / Web 客户端
+- Cold start → first folder view ≤ 3 s on mid-range device with warm cache.
+- Encrypted export round-trip (export → reinstall app → import) recovers identical profile set.
+- Play Console pre-launch report: 0 crashes, 0 ANRs, no permission warnings.

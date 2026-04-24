@@ -1,136 +1,162 @@
-# 设计文档
+# Design
 
-> 文档版本：v1.0 · 最后更新：2026-04-24
+> Language / 语言：**English** · [简体中文](DESIGN.zh-CN.md)
 
-## 1. 技术总览
+> **App**: OSS Browser for Android  ·  **Author**: [jinlongliao](https://github.com/JinlongLiao/)  ·  **Repo**: <https://github.com/JinlongLiao/alioss4droid>  ·  **License**: [Apache License 2.0](../LICENSE)  ·  **Application ID**: `io.github.jinlongliao.ossbrowser`
+>
+> Document version: v1.3 · Last updated: 2026-04-24
 
-| 维度 | 方案 |
-| --- | --- |
-| 语言 | Kotlin 2.0.21 |
-| UI | Jetpack Compose + Material 3 |
-| 架构 | 单 Activity + Navigation Compose，层次：UI (Composable) ↔ ViewModel (StateFlow) ↔ Repository / Service |
-| 异步 | Kotlin Coroutines + `Dispatchers.IO` |
-| 持久化 | `EncryptedSharedPreferences` 保存 OSS 密钥 / 普通 `SharedPreferences` 保存偏好 |
-| 序列化 | `kotlinx.serialization` JSON |
-| 图片 / GIF | Coil (`coil-compose` + `coil-gif`) |
-| 音视频 | Media3 ExoPlayer |
-| PDF | Android 原生 `PdfRenderer` |
-| SDK | Aliyun `oss-android-sdk` |
-
-## 2. 模块与职责
+## 1. Architecture overview
 
 ```
-com.ossbrowser.app
-├── OssBrowserApp.kt           # Application，统一装配 Repository / Provider / Locale
-├── MainActivity.kt            # 单 Activity；attachBaseContext 负责应用语言
-├── data/
-│   ├── OssProfile              # 密钥 / 配置 数据类
-│   ├── OssProfileRepository    # 多配置 CRUD + 激活项
-│   ├── AppSettings             # 偏好设置
-│   └── SettingsRepository      # 偏好读写 + StateFlow
-├── oss/
-│   ├── OssClientProvider       # 多 endpoint 缓存 OSSClient；service-level client
-│   ├── OssService              # 业务 API：list/upload/download/delete/move/presign/exists/downloadBytes/downloadToFile
-│   ├── OssObjectItem           # Folder / File / BucketInfo
-│   ├── OssFileIcon             # 扩展名 → 图标 / 颜色
-│   └── OssPreviewKind          # TEXT/IMAGE/AUDIO/VIDEO/PDF/UNSUPPORTED 及扩展名集合
-├── ui/
-│   ├── OssBrowserRoot          # NavHost + BottomNav + 隐私同意拦截
-│   ├── theme/Theme.kt          # M3 主题（跟随系统 / 浅 / 深）
-│   ├── profile/                # 密钥页
-│   ├── browser/                # 浏览页 + ViewModel + 各类 Dialog / Preview
-│   └── settings/               # 设置 / 隐私 / 开源许可
-└── util/
-    ├── FileUtils               # SAF 复制 / 人类可读大小
-    └── LocaleHelper            # 语言解析 + Context 包装
+┌─────────────────────── UI layer (Jetpack Compose) ───────────────────────┐
+│ OssBrowserRoot (NavHost)                                                 │
+│  ├── BrowserScreen         — bucket list / object list / preview host    │
+│  ├── ProfileListScreen     — OSS profile management                      │
+│  ├── ProfileEditScreen     — form-based create / edit                    │
+│  └── SettingsScreen        — appearance / privacy / backup / licenses    │
+└────────────┬────────────────────────────────────────────────────────────┘
+             │ state: StateFlow
+┌────────────┴─── ViewModel layer ─────────────┐
+│ BrowserViewModel · ProfileViewModel ·         │
+│ SettingsViewModel                             │
+└────────────┬─────────────────────────────────┘
+             │ coroutines
+┌────────────┴────── Data / service layer ─────────────────────────────────┐
+│ OssProfileRepository  EncryptedSharedPreferences   (AES-256-GCM)         │
+│ SettingsRepository    SharedPreferences                                  │
+│ OssListCache          in-memory LRU + disk JSON (30-min TTL)             │
+│ OssClientProvider     cache `OSSClient` per (profile × endpoint)         │
+│ OssService            listBuckets / listObjects / upload / download /    │
+│                       delete / move / presign                            │
+│ ProfileBackupCodec    AES-256-GCM + PBKDF2-HmacSHA256 for backups        │
+└────────────┬─────────────────────────────────────────────────────────────┘
+             │ com.aliyun.dpa:oss-android-sdk 2.9.13
+         Aliyun OSS REST API (HTTPS)
 ```
 
-## 3. 关键状态机
+## 2. Navigation
 
-### 3.1 BrowserUiState
+Single-activity, Compose Navigation with the following routes:
 
-```
-BrowserUiState(
-  activeProfile, profiles, currentBucket, currentBucketEndpoint,
-  prefix,                 // 当前目录（以 / 结尾）
-  items, nextMarker,      // 分页列表
-  loading, loadingMore,   // 两级加载态
-  highlightKey,           // 路径跳转后要高亮的 key
-  buckets,                // Bucket 列表视图下
-  errorMessage, task,     // 全局错误 / 进度
-  previewState            // 预览态
-)
-```
+- `browser` — default landing.
+- `profiles` / `profile_edit?id={id}` — accessed from *Settings* and *Browser → Keys icon*.
+- `settings` / `settings/privacy` / `settings/licenses`.
 
-进入新目录：`loadJob?.cancel()` → `_state = state.copy(loading=true, items=[], nextMarker=null)` → `service.list(..., pageSize)` → 成功：`loading=false, items, nextMarker`；失败：`loading=false, errorMessage`。
+Bottom navigation keeps "Files / Settings". The "Keys" entry lives inside Settings because it is
+the single most important configuration, deserving a prominent card rather than a tab.
 
-### 3.2 预览状态
+## 3. Key data flows
 
-```
-PreviewState ::= Loading | Text | Image | Media(audio/video) | Pdf
-```
+### 3.1 Bucket / object listing
 
-- **TEXT**：`OssService.downloadBytes(maxBytes)`，超限抛错。
-- **IMAGE / AUDIO / VIDEO**：预签名 URL（1h 过期），UI 用 Coil / ExoPlayer 播放。
-- **PDF**：下载到 `cacheDir/pdf/<hash>_<name>`；`PdfRenderer` 按屏幕宽度等比渲染每页 Bitmap。
-- **UNSUPPORTED**：直接设为 `TaskState.Failed`。
+1. User enters a profile or bucket.
+2. ViewModel computes a cache key = `profileId + bucket + prefix + marker`.
+3. `OssListCache.get(key)` returns immediately if fresh; UI renders.
+4. In parallel (if stale or forced), `OssService.listObjectsV2` is called.
+5. `refreshSeq` guard: increments on every cancel/refresh; stale responses from long-running
+   SDK calls are discarded to avoid UI getting stuck.
+6. On success, cache is updated and the UI re-renders; on failure, the cached view is preserved
+   and an error card appears on top.
 
-## 4. OSS Client 选型
+### 3.2 Encrypted profile backup
 
-Aliyun SDK 的 `OSSClient` 同时需要 endpoint：
+Export / import uses `ProfileBackupCodec` with two modes:
 
-- `listBuckets()` **只能** 用**不带 endpoint 的 service client**
-- 其它对象操作必须使用**对应 Bucket 所在 region 的 endpoint**
-
-设计：
-- `OssClientProvider.service()` → 进程级唯一 service client（按激活 profile 缓存）
-- `OssClientProvider.current(endpoint)` → 按 `profileId|endpoint` 缓存；切换激活配置时整体失效
-
-## 5. 排序策略
-
-```kotlin
-val FolderFirstByName: Comparator<OssObjectItem> = Comparator { a, b ->
-    val folderA = a is Folder; val folderB = b is Folder
-    when {
-        folderA && !folderB -> -1
-        !folderA && folderB -> 1
-        else -> a.displayName.compareTo(b.displayName, ignoreCase = true)
-    }
-}
-```
-
-- `list()` 首屏即应用排序
-- `loadMore()` 追加后**再次全量排序**，保证分页叠加后依然"文件夹优先 + 名称有序"
-
-## 6. 国际化方案
-
-- `res/values/strings.xml`：英文（缺省 / fallback）
-- `res/values-zh-rCN/`、`res/values-zh-rTW/`：简 / 繁
-- `AppSettings.languageTag`：`""` = 跟随系统 / `en` / `zh-CN` / `zh-TW`
-- `LocaleHelper.resolve(tag)`：把系统非支持语种映射到英文；`zh`（不带 script/country）默认简体
-- `Application.attachBaseContext` + `MainActivity.attachBaseContext` 均调用 `LocaleHelper.wrap(...)`
-- 切换语言时 `(context as Activity).recreate()`，无需重启进程
-
-## 7. 隐私 / 安全
-
-- 密钥：`EncryptedSharedPreferences`（Android Keystore 主密钥）
-- 备份排除：`backup_rules.xml` + `data_extraction_rules.xml` 排除 `oss_profiles.xml`
-- 首启隐私拦截：`PrivacyConsentDialog`，`dismissOnBackPress=false` & `dismissOnClickOutside=false`
-- 网络安全：`network_security_config.xml` 仅对 `*.aliyuncs.com` 域开放 cleartext，用于部分老 endpoint
-
-## 8. 可配置项默认值
-
-| Key | 默认 | 可选 |
+| Mode | Key derivation | Use case |
 | --- | --- | --- |
-| `themeMode` | SYSTEM | SYSTEM / LIGHT / DARK |
-| `languageTag` | "" | "" / en / zh-CN / zh-TW |
-| `pageSize` | 10 | 10 / 20 / 50 / 100 |
-| `textPreviewMaxBytes` | 2 MB | 512KB / 2MB / 5MB / 10MB |
-| `autoPlayMedia` | true | bool |
-| `confirmDestructiveOps` | true | bool |
+| `APP` (default) | `SHA-256(APP_SECRET ‖ salt)` | Device-to-device with the same app. |
+| `PASSWORD` | `PBKDF2WithHmacSHA256(password, salt, 200_000, 256)` | Sharing across users. |
 
-## 9. 已知限制
+File layout (binary):
 
-- PDF 采用一次性全量渲染，超大 PDF 可能瞬时占用较多内存；后续可改为按可见页懒渲染
-- 目录 move / delete 为客户端递归；在超大目录下建议配合服务端批量接口
-- 未做自动刷新 Token / STS；AK/SK 需用户自行管理
+```
+magic[4] = "ALOS"
+version  = 0x01
+mode     = 0x00 (APP) | 0x01 (PASSWORD)
+salt(16) | iv(12) | ciphertext‖tag(16)
+```
+
+GCM tag failure ⇒ "wrong password"; magic/version mismatch ⇒ "bad format". Import is
+idempotent: matches existing profiles by `id`, falling back to `(endpoint, AccessKey ID)`.
+
+### 3.3 Preview pipeline
+
+- Text: pre-check `Content-Length` against `textPreviewMaxBytes`; stream into a buffer, render
+  in `SelectionContainer`. Extensions treated as text cover `txt, json, xml, yaml, yml, md, groovy,
+  gradle, kts, plist, dart, scala, hcl, ini, toml, properties, sh, py, js, ts, go, java, kt, c, cpp, h, hpp, cs, rs, php, rb, log, csv, tsv, env, gitignore, dockerfile`.
+- Image: fetch presigned URL via Coil with a dedicated `ImageLoader` that registers GIF decoders.
+- Audio/Video: Media3 ExoPlayer with lifecycle-aware pause/release; presigned URL is the media item.
+- PDF: `ParcelFileDescriptor.open(...)` + `PdfRenderer`; each page scaled to device width and
+  cached as `Bitmap` for the lifetime of the dialog.
+
+## 4. Caching strategy
+
+Two-tier cache in `OssListCache`:
+
+- **Memory**: `ConcurrentHashMap<String, CacheEntry<T>>`; evicted by process death.
+- **Disk**: JSON files under `context.cacheDir/oss_list_cache/`; survive process restart.
+
+Every entry carries an `updatedAtMs`. Fresh lookup: `now - updatedAtMs <= 30 min`. Refresh button
+or invalidation via `clientProvider.invalidate()` (triggered on profile changes) clears both tiers.
+
+## 5. Threading model
+
+- All network / SDK calls happen in `viewModelScope` using `Dispatchers.IO` inside `withContext`.
+- `BrowserViewModel.cancelLoading()` increments the `refreshSeq` rather than cancelling the
+  coroutine, since the Aliyun SDK performs blocking work that doesn't respond to coroutine
+  cancellation; the UI still recovers immediately because stale responses are dropped.
+- Compose recomposition reads `StateFlow`s; no direct `LiveData` usage.
+
+## 6. Release signing & compliance
+
+- `app/build.gradle.kts` reads `keystore.properties` (git-ignored). When present, `release` build
+  uses it; otherwise builds an unsigned APK.
+- `release` build enables `isMinifyEnabled = true` + `isShrinkResources = true` with rules in
+  `proguard-rules.pro`.
+- `resourceConfigurations` whitelists `en`, `zh-rCN`, `zh-rTW` to keep APK size small and to
+  avoid crash-on-locale-missing during market review.
+- Privacy policy + open-source notice are shipped as raw resources (`res/raw*/*.md`) so
+  store-listing forms can copy-paste them verbatim.
+
+## 7. Error handling philosophy
+
+- User-facing errors are localized via `R.string.task_*_failed` templates.
+- `CancellationException` is rethrown, never logged as error (avoids misleading "cancelled" toast).
+- SDK timeouts are capped at 15 seconds to surface misconfigurations quickly.
+
+## 8. Extensibility
+
+- `OssPreviewKind` is a sealed hierarchy — adding new previewable types (e.g. office docs) only
+  requires a new case and a UI composable.
+- `ProfileBackupCodec` is versioned (`VERSION = 1`); future layouts can bump the byte and branch.
+- `OssService` abstracts the Aliyun SDK; other S3-compatible SDKs can plug in behind the same
+  interface.
+
+## 9. In-app Markdown renderer
+
+The app ships Privacy Policy and Open-Source Notice as locale-specific Markdown inside
+`res/raw[-zh-rCN|-zh-rTW]/*.md`. Rather than depending on a third-party renderer, a small
+(~250 lines) zero-dependency Compose renderer lives in
+`ui/settings/MarkdownView.kt`:
+
+- Block grammar: ATX headings (`#` / `##` / `###`), paragraphs, bullet (`- ` / `* `) and
+  numbered (`1. `) lists with soft-wrap continuation, blockquotes (`> `), fenced code blocks,
+  and horizontal rules (`---` / `***` / `___`).
+- Inline grammar: `**bold**`, `*italic*` / `_italic_`, `` `code` ``, `[label](url)`, and bare
+  `https?://` auto-links.
+- Styling is driven by `MaterialTheme.colorScheme` / `typography`, so the rendered text
+  follows the active light/dark theme without extra work.
+- Links use Compose 1.7 `LinkAnnotation.Url` + `TextLinkStyles` — no deprecated `ClickableText`.
+
+Entry points that consume it: `PrivacyScreen`, `LicensesScreen` (project license card),
+`PrivacyConsentGate` (first-launch dialog).
+
+## 10. Source encoding & line endings
+
+- Whole repo uses **LF** line endings enforced by `.gitattributes` and `.editorconfig`.
+- The only exception is `scripts/gen-release-keystore.ps1`, which is pinned to **CRLF** so
+  `powershell.exe` treats it identically across Windows locales (double-click experience).
+- Kotlin sources carry an Apache 2.0 file header with
+  `Copyright (C) 2026 jinlongliao (https://github.com/JinlongLiao/)`. `@author` / `@since`
+  KDoc fields follow `yyyy-MM-dd` format.
