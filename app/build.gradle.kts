@@ -16,6 +16,7 @@ val keystoreProps = Properties().apply {
     }
 }
 val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true
+val hasDebugKeystore = keystoreProps.getProperty("debugStoreFile")?.let { rootProject.file(it).exists() } == true
 
 android {
     namespace = "io.github.jinlongliao.ossbrowser"
@@ -46,17 +47,29 @@ android {
                 enableV4Signing = true
             }
         }
+        if (hasDebugKeystore) {
+            // 覆盖 AGP 默认的 debug 签名：让测试包也拥有一张可控的固定指纹证书，
+            // 避免团队每台机器 ~/.android/debug.keystore 指纹不同带来的 SDK 授权烦恼。
+            getByName("debug") {
+                storeFile = rootProject.file(keystoreProps.getProperty("debugStoreFile"))
+                storePassword = keystoreProps.getProperty("debugStorePassword")
+                keyAlias = keystoreProps.getProperty("debugKeyAlias")
+                keyPassword = keystoreProps.getProperty("debugKeyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            // 存在 keystore.properties 时让 debug 也用正式签名，方便与 release 保持一致，
-            // 否则回退到 AGP 自动生成的 ~/.android/debug.keystore。
-            if (hasReleaseKeystore) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            // 不显式覆盖 signingConfig：
+            //   - hasDebugKeystore=true  → 上面已改写默认 debug signingConfig
+            //   - hasDebugKeystore=false → 继续走 AGP 自动生成的 ~/.android/debug.keystore
         }
         release {
             isMinifyEnabled = true

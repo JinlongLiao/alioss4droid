@@ -16,6 +16,11 @@ calendar-ish tags since no public release has been cut yet.
 - **Release signing pipeline** – `app/build.gradle.kts` reads `keystore.properties`;
   helper scripts under `scripts/gen-release-keystore.(ps1|sh)` automate keystore
   generation. `release` build enables R8 + resource shrinking.
+- **Dedicated debug signing** – optional `debugStoreFile` / `debugStorePassword` /
+  `debugKeyAlias` / `debugKeyPassword` keys in `keystore.properties` let `debug`
+  APKs be signed by a team-owned keystore (stable SHA-1 for SDKs that whitelist
+  signing certs, e.g. WeChat / AMap). Omitting them falls back to AGP's auto
+  `~/.android/debug.keystore`.
 - **Bilingual documentation** – `README`, `REQUIREMENTS`, `DESIGN`, `USAGE` now ship
   English as the default and `*.zh-CN.md` Chinese counterparts with cross-links.
 - **In-app Markdown renderer** – zero-dependency Compose renderer (`MarkdownView.kt`)
