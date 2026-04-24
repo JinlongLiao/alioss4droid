@@ -15,7 +15,7 @@ val keystoreProps = Properties().apply {
         keystorePropsFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { file(it).exists() } == true
+val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true
 
 android {
     namespace = "io.github.jinlongliao.ossbrowser"
@@ -36,7 +36,7 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
