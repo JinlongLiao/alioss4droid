@@ -52,6 +52,11 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // 存在 keystore.properties 时让 debug 也用正式签名，方便与 release 保持一致，
+            // 否则回退到 AGP 自动生成的 ~/.android/debug.keystore。
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         release {
             isMinifyEnabled = true
