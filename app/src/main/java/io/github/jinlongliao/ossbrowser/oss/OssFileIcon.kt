@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Coffee
 import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FolderZip
@@ -45,7 +46,14 @@ private val PDF_EXT = setOf("pdf")
 private val WORD_EXT = setOf("doc", "docx", "rtf", "odt", "pages")
 private val EXCEL_EXT = setOf("xls", "xlsx", "csv", "tsv", "ods", "numbers")
 private val PPT_EXT = setOf("ppt", "pptx", "odp", "key")
-private val ARCHIVE_EXT = setOf("zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso", "apk", "jar", "war")
+/** 通用压缩包扩展名；APK 与 Java 归档包由专属图标分组优先处理。 */
+private val ARCHIVE_EXT = setOf("zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso")
+
+/** Java 可执行归档与 Web 应用归档，使用 Java 咖啡杯图标与普通 ZIP 区分。 */
+private val JAVA_ARCHIVE_EXT = setOf("jar", "war")
+
+/** 常见桌面安装包与可执行程序，使用终端图标避免落入通用文件类型。 */
+private val EXECUTABLE_EXT = setOf("exe", "msi", "appimage", "deb", "rpm", "dmg", "pkg")
 private val CODE_EXT = setOf(
     "kt", "kts", "java", "py", "rb", "php", "go", "rs", "swift", "lua",
     "c", "cc", "cpp", "cxx", "h", "hpp", "cs", "m", "mm",
@@ -76,6 +84,8 @@ fun iconForFileName(name: String): FileIconSpec {
         ext in WORD_EXT -> FileIconSpec(Icons.Outlined.Description, Color(0xFF1976D2))
         ext in EXCEL_EXT -> FileIconSpec(Icons.Outlined.TableChart, Color(0xFF2E7D32))
         ext in PPT_EXT -> FileIconSpec(Icons.Outlined.Slideshow, Color(0xFFE65100))
+        ext in JAVA_ARCHIVE_EXT -> FileIconSpec(Icons.Outlined.Coffee, Color(0xFFEF6C00))
+        ext in EXECUTABLE_EXT -> FileIconSpec(Icons.Outlined.Terminal, Color(0xFF3949AB))
         ext in ARCHIVE_EXT -> FileIconSpec(Icons.Outlined.FolderZip, Color(0xFF795548))
         ext in DATA_EXT -> FileIconSpec(Icons.Outlined.DataObject, Color(0xFF00838F))
         ext in CODE_EXT -> FileIconSpec(Icons.Outlined.Code, Color(0xFF00897B))
