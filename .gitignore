@@ -46,3 +46,4 @@ Desktop.ini
 # Kotlin / JVM
 hs_err_pid*
 replay_pid*
+/.codegraph/
