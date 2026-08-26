@@ -18,6 +18,8 @@ package io.github.jinlongliao.ossbrowser.oss
 /** 预览类型，按对象 key 的扩展名粗略判定。 */
 enum class OssPreviewKind {
     TEXT,
+    /** HTML 文档；默认以禁用脚本和外部网络的静态 WebView 渲染。 */
+    HTML,
     IMAGE,
     AUDIO,
     VIDEO,
@@ -30,6 +32,9 @@ enum class OssPreviewKind {
 /** Markdown 扩展名，用于在文本预览中启用「富文本/源码」切换。 */
 private val MARKDOWN_EXTS: Set<String> = setOf("md", "markdown", "mdown", "mkd", "mkdn")
 
+/** HTML 文档扩展名；从普通文本中单独分类，以便提供静态/完整网页预览。 */
+private val HTML_EXTS: Set<String> = setOf("html", "htm", "xhtml")
+
 /** 返回 true 表示文件名应以 Markdown 富文本形式渲染。 */
 fun OssObjectItem.File.isMarkdownFile(): Boolean {
     val ext = displayName.lowercase().substringAfterLast('.', "")
@@ -41,7 +46,7 @@ private val TEXT_EXTS: Set<String> = setOf(
     "txt", "log", "md", "markdown", "mdown", "mkd", "mkdn", "rst", "tex", "adoc",
     "json", "xml", "yaml", "yml", "toml", "ini", "conf", "cfg", "properties", "env", "plist",
     "csv", "tsv",
-    "html", "htm", "xhtml", "css", "scss", "sass", "less",
+    "css", "scss", "sass", "less",
     "js", "ts", "jsx", "tsx", "mjs", "cjs", "vue", "svelte",
     "kt", "kts", "java", "gradle", "groovy", "scala", "clj", "cljs",
     "py", "ipynb", "rb", "php", "go", "rs", "swift", "lua", "dart", "erl", "ex", "exs",
@@ -82,6 +87,7 @@ fun OssObjectItem.File.previewKind(): OssPreviewKind {
     return when (ext) {
         in PDF_EXTS -> OssPreviewKind.PDF
         in DOCX_EXTS -> OssPreviewKind.DOCX
+        in HTML_EXTS -> OssPreviewKind.HTML
         in TEXT_EXTS -> OssPreviewKind.TEXT
         in IMAGE_EXTS -> OssPreviewKind.IMAGE
         in AUDIO_EXTS -> OssPreviewKind.AUDIO

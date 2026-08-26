@@ -79,12 +79,22 @@
     <string name="nav_path_help">• 以 / 结尾 → 进入该目录\n• 文件路径 → 跳到其所在目录并定位该文件\n• 留空 → 回到 bucket 根</string>
     <string name="nav_path_confirm">跳转</string>
 
-    <string name="presign_dialog_title">生成临时下载链接</string>
+    <string name="presign_dialog_title">生成分享链接</string>
     <string name="presign_file_label">文件: %1$s</string>
+    <string name="share_mode_signed">临时签名链接</string>
+    <string name="share_mode_public">公开链接（不使用签名）</string>
     <string name="presign_expire_label">有效期（小时，1~168）</string>
     <string name="presign_expire_help">OSS 预签名链接上限为 7 天（168 小时）。</string>
-    <string name="presign_result_title">临时链接已生成</string>
+    <string name="share_domain_title">访问域名</string>
+    <string name="share_domain_default">OSS 默认公网域名</string>
+    <string name="share_cname_loading">正在获取自定义域名…</string>
+    <string name="share_cname_empty">未获取到已启用的自定义域名，仍可使用 OSS 默认公网域名。</string>
+    <string name="share_cname_failed">获取自定义域名失败，请检查 oss:ListCname 权限或稍后重试。仍可使用 OSS 默认公网域名。</string>
+    <string name="share_public_help">仅当 Bucket 或 Object 允许匿名读取时，公开链接才能正常访问。</string>
+    <string name="presign_result_title">分享链接已生成</string>
     <string name="presign_result_expire">有效期 %1$d 小时</string>
+    <string name="share_result_public_default">公开链接 · OSS 默认域名 · 链接无过期时间</string>
+    <string name="share_result_public_cname">公开链接 · %1$s · 链接无过期时间</string>
 
     <string name="move_title_folder">移动目录 / 重命名</string>
     <string name="move_title_file">移动文件 / 重命名</string>
@@ -134,6 +144,11 @@
     <string name="preview_choose_player">选择播放器</string>
     <string name="preview_toggle_markdown_rich">以 Markdown 渲染</string>
     <string name="preview_toggle_markdown_source">查看源码</string>
+    <string name="preview_html_switch_full">开启完整网页预览</string>
+    <string name="preview_html_switch_safe">返回安全静态预览</string>
+    <string name="preview_html_full_confirm_title">开启完整网页预览？</string>
+    <string name="preview_html_full_confirm_message">这将允许当前 HTML 文件运行 JavaScript 并加载 HTTPS 外部资源。不可信页面可能执行脚本或向外部服务器发送数据；文件访问、混合内容和页面跳转仍会被禁止。</string>
+    <string name="preview_html_enable_full">仅本次预览开启</string>
     <string name="preview_docx_failed">DOCX 解析失败（不支持的格式或文件损坏）。</string>
     <string name="preview_docx_empty">该文档内容为空。</string>
     <string name="preview_loading_title">正在加载预览…</string>
@@ -175,6 +190,10 @@
     <string name="settings_section_about">关于</string>
 
     <string name="settings_theme">主题模式</string>
+    <string name="settings_color_theme">主题配色</string>
+    <string name="settings_color_theme_default">默认</string>
+    <string name="settings_color_theme_gemini">Gemini</string>
+    <string name="settings_color_theme_summer_sky">夏日晴空（by Strivy）</string>
     <string name="settings_theme_system">跟随系统</string>
     <string name="settings_theme_light">浅色</string>
     <string name="settings_theme_dark">深色</string>

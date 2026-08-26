@@ -39,13 +39,15 @@
 - **本地缓存**（内存 + 磁盘，TTL 30 分钟）：导航类操作秒开，刷新按钮强制拉网络
 - 上传（SAF 选择文件，带进度）、下载（`CREATE_DOCUMENT` 指定保存位置）、删除、移动 / 重命名（支持递归目录）
 - 危险操作二次确认（删除 / 移动），可在设置中关闭
-- 生成预签名下载链接，过期时长以小时为单位可调，附复制 / 分享入口
+- 生成临时签名链接（1~168 小时）或无签名公开链接；公开链接可选择 OSS 返回的已启用
+  Bucket 自定义域名，附复制 / 分享入口
 
 ### 文件预览
 
 | 类型 | 实现 |
 | --- | --- |
 | TEXT（txt / json / xml / yaml / md / groovy / gradle / kts / plist / dart / scala / hcl…） | 流式下载到内存（大小上限可配），`SelectionContainer` 支持复制 |
+| HTML（html / htm / xhtml） | WebView 安全静态渲染；可在当前会话确认后开启 JavaScript 与 HTTPS 外部资源 |
 | IMAGE（jpg / png / webp / gif / bmp…） | Coil + `coil-gif` 异步加载预签名 URL |
 | AUDIO / VIDEO | Media3 ExoPlayer 内嵌播放，可暂停 / 快进 / 拖动进度 |
 | PDF | `PdfRenderer` 分页位图渲染 |
@@ -53,8 +55,9 @@
 ### 国际化 & 外观
 
 - 简体中文 / English / 繁體中文，可在设置页切换或跟随系统
-- 明亮 / 深色 / 跟随系统三种主题
-- 文件类型图标按扩展名分色映射；未知类型走通用 icon
+- 配色与明暗模式独立选择：默认 / Gemini / 夏日晴空配色，以及明亮 / 深色 / 跟随系统模式
+- 夏日晴空壁纸首次远程加载并写入应用私有缓存，离线时优先使用缓存或本地渐变兜底
+- 文件类型图标按扩展名分色映射，列表采用 Material 3 色调容器与圆角卡片；未知类型走通用 icon
 
 ---
 
@@ -200,7 +203,8 @@ gradlew.bat :app:assembleDebug
 - AK/SK 仅保存在本机 `EncryptedSharedPreferences`，Key 由 Android Keystore 派生，不上传任何第三方。
 - 备份策略 (`fullBackupContent` / `dataExtractionRules`) 排除 `oss_profiles.xml`，防止云备份泄露密钥。
 - 网络安全配置 `network-security-config.xml` 仅在必要的 `*.aliyuncs.com` 子域启用 cleartext，其他域名默认禁用明文。
-- RAM 子账号最小权限建议：仅授予对应 Bucket 的 `ListObjects` / `GetObject` / `PutObject` / `DeleteObject`。
+- RAM 子账号最小权限建议：仅授予对应 Bucket 的 `ListObjects` / `GetObject` / `PutObject` / `DeleteObject`；
+  仅在需要自动获取 Bucket 自定义域名时增加 `oss:ListCname`。未授予时，公开链接会回退到 OSS 默认公网域名。
 
 ---
 

@@ -17,6 +17,7 @@ package io.github.jinlongliao.ossbrowser.oss
 
 import android.content.Context
 import android.net.Uri
+import android.util.Xml
 import com.alibaba.sdk.android.oss.ClientException
 import com.alibaba.sdk.android.oss.ServiceException
 import com.alibaba.sdk.android.oss.model.CopyObjectRequest
@@ -28,8 +29,15 @@ import com.alibaba.sdk.android.oss.model.PutObjectRequest
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Date
+import java.util.Base64
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * OSS 业务封装：全部在 IO 线程执行，异常抛出给调用方。目录模型：以 `/` 结尾的 key 表示目录。
@@ -101,6 +109,12 @@ class OssService(private val provider: OssClientProvider) {
     }
 
     companion object {
+        /** ListCname 错误响应的最大读取字符数，仅用于提取非敏感错误码。 */
+        private const val MAX_ERROR_RESPONSE_LENGTH = 8_192
+
+        /** ListCname 预签名 URL 的有效期，单位为秒。 */
+        private const val LIST_CNAME_URL_TTL_SECONDS = 60L
+
         /** 文件夹优先、名称升序（Locale-aware，不区分大小写）。 */
         val FolderFirstByName: Comparator<OssObjectItem> = Comparator { a, b ->
             val folderA = a is OssObjectItem.Folder
@@ -345,6 +359,138 @@ class OssService(private val provider: OssClientProvider) {
         client.presignConstrainedObjectURL(bucket, key, expireSeconds)
     }
 
+    /**
+     * 生成无需签名参数的公开对象 URL。
+     *
+     * 默认地址由 SDK 按当前 Bucket endpoint 生成；指定 [cname] 时只替换协议和域名，保留 SDK
+     * 对 Object key 的路径编码。调用方必须确保 Bucket/Object 允许匿名读取，否则访问仍会返回 403。
+     *
+     * @param bucket Object 所属 Bucket。
+     * @param key Object key。
+     * @param endpoint Bucket 所在地域的公网 endpoint；为空时使用当前 profile 的 endpoint。
+     * @param cname 用户选择的已启用自定义域名；为空时使用 OSS 默认公网域名。
+     * @return 不包含签名和过期参数的公开 URL。
+     */
+    suspend fun publicObjectUrl(
+        bucket: String,
+        key: String,
+        endpoint: String? = null,
+        cname: OssCnameInfo? = null
+    ): String = withContext(Dispatchers.IO) {
+        val (client, _) = bucketClient(endpoint)
+        val defaultUrl = client.presignPublicObjectURL(bucket, key)
+        if (cname == null) {
+            defaultUrl
+        } else {
+            buildCustomDomainUrl(defaultUrl, cname)
+        }
+    }
+
+    /**
+     * 查询 Bucket 已启用的自定义域名。
+     *
+     * Android SDK 2.9.x 未公开封装 ListCname，因此先使用 SDK 的预签名能力构造短时有效的
+     * `GET /?cname` 请求，再直接读取官方 XML 响应。签名 URL 不会进入异常文本或日志。
+     * RAM 用户需要 `oss:ListCname` 权限；未绑定域名时 OSS 返回 404，本方法按空列表处理。
+     *
+     * @param bucket 待查询的 Bucket。
+     * @param endpoint Bucket 所在地域的公网 endpoint；为空时使用当前 profile 的 endpoint。
+     * @return 状态为 `Enabled` 的自定义域名，保持 OSS 返回顺序。
+     * @throws IllegalStateException 网络失败、权限不足或响应无法解析时抛出，消息包含状态码、
+     * 请求 ID 和不含凭证的响应体，供界面提示和问题定位。
+     * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/listcname">阿里云 OSS ListCname</a>
+     */
+    suspend fun listCnames(
+        bucket: String,
+        endpoint: String? = null
+    ): List<OssCnameInfo> = withContext(Dispatchers.IO) {
+        val (client, profile) = bucketClient(endpoint)
+        val expiresAtSeconds = System.currentTimeMillis() / 1_000L + LIST_CNAME_URL_TTL_SECONDS
+        val signedUrl = createListCnameSignedUrl(
+            baseUrl = client.presignPublicObjectURL(bucket, ""),
+            bucket = bucket,
+            accessKeyId = profile.accessKeyId,
+            accessKeySecret = profile.accessKeySecret,
+            expiresAtSeconds = expiresAtSeconds
+        )
+        val connection = URL(signedUrl).openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 15_000
+        connection.instanceFollowRedirects = false
+        try {
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                val requestId = connection.getHeaderField("x-oss-request-id").orEmpty()
+                val responseBody = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                    .orEmpty()
+                    .take(MAX_ERROR_RESPONSE_LENGTH)
+                val errorCode = extractOssErrorCode(responseBody)
+                if (statusCode == HttpURLConnection.HTTP_NOT_FOUND && errorCode == "NoSuchCname") {
+                    return@withContext emptyList()
+                }
+                // OSS 的 SignatureDoesNotMatch 响应含 AccessKeyId、签名和 StringToSign。
+                // 异常只保留错误码与 RequestId，避免日志或 UI 再次暴露这些认证材料。
+                throw IllegalStateException(
+                    "ListCname 请求失败：bucket=$bucket, status=$statusCode, " +
+                        "code=${errorCode ?: "Unknown"}, requestId=$requestId"
+                )
+            }
+            connection.inputStream.use(::parseCnames)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /**
+     * 以流式方式解析 ListCname XML，避免加载与业务无关的响应字段。
+     * Certificate/Status 只在 Certificate 节点内代表 HTTPS 证书状态，不能与 Cname/Status 混用。
+     *
+     * @param input OSS ListCname 成功响应流；方法不会关闭该流。
+     * @return 响应中的全部 Cname 条目。
+     */
+    private fun parseCnames(input: InputStream): List<OssCnameInfo> {
+        val parser = Xml.newPullParser().apply { setInput(input, null) }
+        val result = ArrayList<OssCnameInfo>()
+        var inCname = false
+        var inCertificate = false
+        var domain = ""
+        var status = ""
+        var certificateStatus = ""
+        while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+            when (parser.eventType) {
+                org.xmlpull.v1.XmlPullParser.START_TAG -> when (parser.name) {
+                    "Cname" -> {
+                        inCname = true
+                        domain = ""
+                        status = ""
+                        certificateStatus = ""
+                    }
+                    "Certificate" -> if (inCname) inCertificate = true
+                    "Domain" -> if (inCname) domain = parser.nextText().trim()
+                    "Status" -> if (inCname) {
+                        val value = parser.nextText().trim()
+                        if (inCertificate) certificateStatus = value else status = value
+                    }
+                }
+                org.xmlpull.v1.XmlPullParser.END_TAG -> when (parser.name) {
+                    "Certificate" -> inCertificate = false
+                    "Cname" -> {
+                        if (domain.isNotBlank() && status.equals("Enabled", ignoreCase = true)) {
+                            result += OssCnameInfo(
+                                domain = domain,
+                                httpsEnabled = certificateStatus.equals("Enabled", ignoreCase = true)
+                            )
+                        }
+                        inCname = false
+                    }
+                }
+            }
+            parser.next()
+        }
+        return result
+    }
+
     @Throws(ClientException::class, ServiceException::class)
     private fun copyOne(bucket: String, src: String, dst: String, endpoint: String?) {
         if (src == dst) return
@@ -358,3 +504,65 @@ class OssService(private val provider: OssClientProvider) {
         val nextMarker: String?
     )
 }
+
+/**
+ * 生成 ListCname 的 OSS V1 查询签名 URL。
+ *
+ * OSS Android SDK 2.9.13 的签名子资源白名单未包含 `cname`：直接调用
+ * `presignConstrainedObjectURL` 会把参数放入 URL，却不会把它纳入签名。这里严格按照
+ * OSS V1 的 CanonicalizedResource 规则，把 `/$bucket/?cname` 放入 HMAC-SHA1 原文。
+ * 该方法只返回短期 URL，调用方不得记录 URL，因为查询参数含 AccessKeyId 与签名。
+ *
+ * @param baseUrl SDK 根据 endpoint 与 Bucket 生成的公开根 URL，不应包含查询参数。
+ * @param bucket 待查询的 Bucket 名称。
+ * @param accessKeyId 当前配置的 AccessKey ID。
+ * @param accessKeySecret 当前配置的 AccessKey Secret；只用于本地签名，不写入 URL。
+ * @param expiresAtSeconds URL 失效时刻，Unix 秒。
+ * @return 已包含 `cname`、AccessKeyId、Expires 与 Signature 的请求 URL。
+ * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/listcname">OSS ListCname</a>
+ * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/include-signatures-in-the-authorization-header">OSS V1 CanonicalizedResource</a>
+ */
+internal fun createListCnameSignedUrl(
+    baseUrl: String,
+    bucket: String,
+    accessKeyId: String,
+    accessKeySecret: String,
+    expiresAtSeconds: Long
+): String {
+    require(!baseUrl.contains('?')) { "ListCname baseUrl 不应包含查询参数" }
+    val canonicalString = "GET\n\n\n$expiresAtSeconds\n/$bucket/?cname"
+    val signer = Mac.getInstance("HmacSHA1").apply {
+        init(SecretKeySpec(accessKeySecret.toByteArray(Charsets.UTF_8), "HmacSHA1"))
+    }
+    val signature = Base64.getEncoder().encodeToString(
+        signer.doFinal(canonicalString.toByteArray(Charsets.UTF_8))
+    )
+    return buildString {
+        append(baseUrl)
+        append("?cname&OSSAccessKeyId=")
+        append(urlEncodeQueryValue(accessKeyId))
+        append("&Expires=")
+        append(expiresAtSeconds)
+        append("&Signature=")
+        append(urlEncodeQueryValue(signature))
+    }
+}
+
+/**
+ * 从 OSS XML 错误响应中提取短错误码。
+ *
+ * 只允许不含空白和 XML 标记的短值，避免把 AccessKeyId、Signature、StringToSign 等
+ * 服务端诊断字段带入异常、日志或界面。
+ *
+ * @param responseBody 截断后的 OSS XML 错误响应。
+ * @return 安全的错误码；格式不匹配时返回 `null`。
+ */
+internal fun extractOssErrorCode(responseBody: String): String? =
+    Regex("<Code>\\s*([^<\\s]{1,128})\\s*</Code>", RegexOption.IGNORE_CASE)
+        .find(responseBody)
+        ?.groupValues
+        ?.getOrNull(1)
+
+/** 将单个查询参数值编码为 UTF-8，空格固定使用 `%20`。 */
+private fun urlEncodeQueryValue(value: String): String =
+    URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")

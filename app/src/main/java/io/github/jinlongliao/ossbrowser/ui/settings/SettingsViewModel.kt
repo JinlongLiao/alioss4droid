@@ -21,6 +21,7 @@ import io.github.jinlongliao.ossbrowser.OssBrowserApp
 import io.github.jinlongliao.ossbrowser.data.AppSettings
 import io.github.jinlongliao.ossbrowser.data.SettingsRepository
 import io.github.jinlongliao.ossbrowser.data.ThemeMode
+import io.github.jinlongliao.ossbrowser.data.ThemePalette
 import kotlinx.coroutines.flow.StateFlow
 
 class SettingsViewModel(
@@ -30,6 +31,8 @@ class SettingsViewModel(
     val state: StateFlow<AppSettings> = repo.settings
 
     fun setThemeMode(mode: ThemeMode) = repo.update { it.copy(themeMode = mode) }
+    /** 更新配色主题，不改变用户选择的跟随系统/浅色/深色模式。 */
+    fun setThemePalette(palette: ThemePalette) = repo.update { it.copy(themePalette = palette) }
     fun setPageSize(size: Int) = repo.update { it.copy(pageSize = size.coerceIn(1, 1000)) }
     fun setTextPreviewMax(bytes: Long) = repo.update { it.copy(textPreviewMaxBytes = bytes) }
     fun setAutoPlayMedia(enabled: Boolean) = repo.update { it.copy(autoPlayMedia = enabled) }

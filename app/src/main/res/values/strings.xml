@@ -86,12 +86,22 @@
     <string name="nav_path_confirm">Jump</string>
 
     <!-- Presign -->
-    <string name="presign_dialog_title">Generate temporary link</string>
+    <string name="presign_dialog_title">Generate share link</string>
     <string name="presign_file_label">File: %1$s</string>
+    <string name="share_mode_signed">Signed temporary link</string>
+    <string name="share_mode_public">Public link (no signature)</string>
     <string name="presign_expire_label">Expiration (hours, 1–168)</string>
     <string name="presign_expire_help">OSS presigned URLs are valid for up to 7 days (168 hours).</string>
-    <string name="presign_result_title">Temporary link generated</string>
+    <string name="share_domain_title">Access domain</string>
+    <string name="share_domain_default">OSS default public domain</string>
+    <string name="share_cname_loading">Loading custom domains…</string>
+    <string name="share_cname_empty">No enabled custom domain was found. You can still use the OSS default domain.</string>
+    <string name="share_cname_failed">Could not load custom domains. Check the oss:ListCname permission or try again. The OSS default domain is still available.</string>
+    <string name="share_public_help">Public links work only when anonymous read access is allowed for the bucket or object.</string>
+    <string name="presign_result_title">Share link generated</string>
     <string name="presign_result_expire">Expires in %1$d hours</string>
+    <string name="share_result_public_default">Public link · OSS default domain · no expiration</string>
+    <string name="share_result_public_cname">Public link · %1$s · no expiration</string>
 
     <!-- Move -->
     <string name="move_title_folder">Move / rename folder</string>
@@ -145,6 +155,11 @@
     <string name="preview_choose_player">Choose player</string>
     <string name="preview_toggle_markdown_rich">Render Markdown</string>
     <string name="preview_toggle_markdown_source">Show raw text</string>
+    <string name="preview_html_switch_full">Enable full web preview</string>
+    <string name="preview_html_switch_safe">Return to safe static preview</string>
+    <string name="preview_html_full_confirm_title">Enable full web preview?</string>
+    <string name="preview_html_full_confirm_message">This allows JavaScript and HTTPS external resources in the current HTML file. Untrusted pages may run scripts or send data to external servers. File access, mixed content, and page navigation remain blocked.</string>
+    <string name="preview_html_enable_full">Enable for this preview</string>
     <string name="preview_docx_failed">Failed to parse DOCX (unsupported or corrupt file).</string>
     <string name="preview_docx_empty">This document is empty.</string>
     <string name="preview_loading_title">Loading preview…</string>
@@ -188,6 +203,10 @@
     <string name="settings_section_about">About</string>
 
     <string name="settings_theme">Theme</string>
+    <string name="settings_color_theme">Color theme</string>
+    <string name="settings_color_theme_default">Default</string>
+    <string name="settings_color_theme_gemini">Gemini</string>
+    <string name="settings_color_theme_summer_sky">Summer Sky (by Strivy)</string>
     <string name="settings_theme_system">Follow system</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>

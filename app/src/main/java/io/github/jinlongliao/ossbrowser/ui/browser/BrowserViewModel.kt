@@ -17,6 +17,7 @@ package io.github.jinlongliao.ossbrowser.ui.browser
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -26,6 +27,7 @@ import io.github.jinlongliao.ossbrowser.data.OssProfile
 import io.github.jinlongliao.ossbrowser.data.OssProfileRepository
 import io.github.jinlongliao.ossbrowser.data.SettingsRepository
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
+import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
 import io.github.jinlongliao.ossbrowser.oss.OssListCache
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.OssPreviewKind
@@ -60,6 +62,9 @@ class BrowserViewModel(
     val state: StateFlow<BrowserUiState> = _state.asStateFlow()
 
     private var loadJob: Job? = null
+
+    /** 当前 ListCname 查询任务；关闭或重开分享弹窗时取消，防止旧结果覆盖新弹窗状态。 */
+    private var customDomainsJob: Job? = null
 
     /** 最近一次触发预览的 File；重试 / 超限后的「下载」「生成链接」按钮都依赖它。 */
     private var lastPreviewItem: OssObjectItem.File? = null
@@ -480,8 +485,9 @@ class BrowserViewModel(
             )
             return
         }
-        // 前置检查：TEXT / DOCX 走内存下载，若预计大小已超阈值就不尝试真正下载。
-        if ((kind == OssPreviewKind.TEXT || kind == OssPreviewKind.DOCX) &&
+        // 前置检查：TEXT / HTML / DOCX 走内存下载，若预计大小已超阈值就不尝试真正下载。
+        if ((kind == OssPreviewKind.TEXT || kind == OssPreviewKind.HTML ||
+                kind == OssPreviewKind.DOCX) &&
             item.size > 0 && item.size > textPreviewMax
         ) {
             _state.value = _state.value.copy(
@@ -518,6 +524,20 @@ class BrowserViewModel(
                             name = item.displayName,
                             content = bytes.toString(Charsets.UTF_8),
                             isMarkdown = item.isMarkdownFile()
+                        )
+                    }
+                    OssPreviewKind.HTML -> {
+                        // HTML 首次只下载源码；是否允许脚本和外部资源由预览界面的显式开关控制。
+                        val bytes = service.downloadBytes(
+                            bucket = bucket,
+                            key = item.key,
+                            maxBytes = textPreviewMax,
+                            endpoint = endpoint
+                        )
+                        PreviewState.Html(
+                            key = item.key,
+                            name = item.displayName,
+                            content = bytes.toString(Charsets.UTF_8)
                         )
                     }
                     OssPreviewKind.DOCX -> {
@@ -614,30 +634,109 @@ class BrowserViewModel(
         lastPreviewItem = null
     }
 
-    /** 生成带签名的临时下载链接；成功后通过 [presignResult] 推出，UI 可展示 / 复制 / 分享。 */
-    fun presignUrl(key: String, expireHours: Int) {
+    /**
+     * 按需查询当前 Bucket 的自定义域名。
+     *
+     * 只有用户选择“公开链接”时才调用，避免签名链接流程额外要求 `oss:ListCname` 权限。
+     * 查询失败只写入可恢复的提示态，OSS 默认公网域名仍可继续生成公开链接。
+     */
+    fun loadCustomDomains() {
+        val current = _state.value
+        val bucket = current.currentBucket ?: return
+        val endpoint = current.currentBucketEndpoint
+        if (current.customDomainLookup.loading || current.customDomainLookup.loaded) return
+        _state.value = current.copy(customDomainLookup = CustomDomainLookupState(loading = true))
+        customDomainsJob = viewModelScope.launch {
+            runCatching { service.listCnames(bucket = bucket, endpoint = endpoint) }
+                .onSuccess { domains ->
+                    if (_state.value.currentBucket != bucket) return@onSuccess
+                    _state.value = _state.value.copy(
+                        customDomainLookup = CustomDomainLookupState(
+                            loaded = true,
+                            domains = domains,
+                            warning = if (domains.isEmpty()) str(R.string.share_cname_empty) else null
+                        )
+                    )
+                }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (_state.value.currentBucket != bucket) return@onFailure
+                    Log.e(
+                        TAG,
+                        "ListCname failed: bucket=$bucket, endpoint=${endpoint.orEmpty()}",
+                        e
+                    )
+                    _state.value = _state.value.copy(
+                        customDomainLookup = CustomDomainLookupState(
+                            loaded = true,
+                            // 详细异常只进入已脱敏日志；界面不展示 OSS 原始响应或签名字段。
+                            warning = str(R.string.share_cname_failed)
+                        )
+                    )
+                }
+        }
+    }
+
+    /** 清除上一次分享弹窗的自定义域名查询结果，确保切换 Bucket 后不会复用旧域名。 */
+    fun clearCustomDomains() {
+        customDomainsJob?.cancel()
+        customDomainsJob = null
+        _state.value = _state.value.copy(customDomainLookup = CustomDomainLookupState())
+    }
+
+    /**
+     * 生成用户选择的分享链接；成功后通过 [BrowserUiState.shareLinkResult] 交给 UI 复制或分享。
+     *
+     * 签名链接要求 [expireHours] 在 1~168 之间；公开链接没有过期时间，并可使用用户明确选择的
+     * [customDomain]。本方法不检查 Object ACL，公开权限不足时链接访问方会收到 OSS 403。
+     */
+    fun generateShareUrl(
+        key: String,
+        mode: ShareLinkMode,
+        expireHours: Int?,
+        customDomain: OssCnameInfo?
+    ) {
         val bucket = _state.value.currentBucket ?: return
         val endpoint = _state.value.currentBucketEndpoint
-        if (expireHours <= 0) {
+        if (mode == ShareLinkMode.SIGNED && (expireHours == null || expireHours !in 1..168)) {
             _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_presign_invalid_hours)))
             return
         }
         viewModelScope.launch {
             _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_presigning), 0, 0))
             runCatching {
-                service.presignUrl(
-                    bucket = bucket,
-                    key = key,
-                    expireSeconds = expireHours.toLong() * 3600L,
-                    endpoint = endpoint
-                )
+                when (mode) {
+                    ShareLinkMode.SIGNED -> service.presignUrl(
+                        bucket = bucket,
+                        key = key,
+                        expireSeconds = requireNotNull(expireHours).toLong() * 3600L,
+                        endpoint = endpoint
+                    )
+                    ShareLinkMode.PUBLIC -> service.publicObjectUrl(
+                        bucket = bucket,
+                        key = key,
+                        endpoint = endpoint,
+                        cname = customDomain
+                    )
+                }
             }.onSuccess { url ->
                 _state.value = _state.value.copy(
                     task = null,
-                    presignResult = PresignResult(key = key, url = url, expireHours = expireHours)
+                    shareLinkResult = ShareLinkResult(
+                        key = key,
+                        url = url,
+                        expireHours = expireHours.takeIf { mode == ShareLinkMode.SIGNED },
+                        customDomain = customDomain?.domain
+                    )
                 )
             }.onFailure { e ->
                 if (e is CancellationException) throw e
+                Log.e(
+                    TAG,
+                    "Share link generation failed: bucket=$bucket, key=$key, mode=$mode, " +
+                        "endpoint=${endpoint.orEmpty()}",
+                    e
+                )
                 _state.value = _state.value.copy(
                     task = TaskState.Failed(str(R.string.task_presign_failed, e.localizedMessage ?: e.toString()))
                 )
@@ -645,8 +744,9 @@ class BrowserViewModel(
         }
     }
 
-    fun clearPresignResult() {
-        _state.value = _state.value.copy(presignResult = null)
+    /** 关闭分享结果弹窗并清除其中的 URL。 */
+    fun clearShareLinkResult() {
+        _state.value = _state.value.copy(shareLinkResult = null)
     }
 
     fun move(sourceKey: String, destPrefix: String, newName: String?) {
@@ -685,6 +785,9 @@ class BrowserViewModel(
     }
 
     companion object {
+        /** Android 日志标签；异常日志同时携带 Bucket、Object key、模式和 endpoint。 */
+        private const val TAG = "BrowserViewModel"
+
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -713,7 +816,10 @@ data class BrowserUiState(
     val loading: Boolean = false,
     val errorMessage: String? = null,
     val task: TaskState? = null,
-    val presignResult: PresignResult? = null,
+    /** 分享链接生成结果；非空时 UI 展示复制/分享弹窗。 */
+    val shareLinkResult: ShareLinkResult? = null,
+    /** 当前分享弹窗的自定义域名查询状态。 */
+    val customDomainLookup: CustomDomainLookupState = CustomDomainLookupState(),
     val previewState: PreviewState? = null,
     /** 路径跳转/定位时需要高亮并滚动到的对象 key；一次性消费。 */
     val highlightKey: String? = null,
@@ -723,10 +829,43 @@ data class BrowserUiState(
     val loadingMore: Boolean = false
 )
 
-data class PresignResult(
+/** 用户选择的分享链接类型。 */
+enum class ShareLinkMode {
+    /** 带有效期和 OSS 签名参数的临时链接。 */
+    SIGNED,
+
+    /** 不带签名或链接过期参数、依赖 Object 匿名读取权限的公开链接。 */
+    PUBLIC
+}
+
+/**
+ * 自定义域名查询状态。
+ *
+ * @property loading 是否正在请求 ListCname。
+ * @property loaded 是否已经完成过请求，包括成功、无域名和失败。
+ * @property domains OSS 返回的已启用自定义域名。
+ * @property warning 查询失败或没有可用域名时的非阻断提示。
+ */
+data class CustomDomainLookupState(
+    val loading: Boolean = false,
+    val loaded: Boolean = false,
+    val domains: List<OssCnameInfo> = emptyList(),
+    val warning: String? = null
+)
+
+/**
+ * 已生成的分享链接。
+ *
+ * @property key Object key。
+ * @property url 可复制或交给系统分享的完整 URL。
+ * @property expireHours 签名链接的有效小时数；公开链接为 `null`。
+ * @property customDomain 公开链接使用的自定义域名；默认 OSS 域名或签名链接为 `null`。
+ */
+data class ShareLinkResult(
     val key: String,
     val url: String,
-    val expireHours: Int
+    val expireHours: Int?,
+    val customDomain: String?
 )
 
 sealed class TaskState {
@@ -756,6 +895,13 @@ sealed class PreviewState {
         val content: String,
         /** 若为 `true`，UI 可提供「源码 / 富文本」切换，默认以 Markdown 渲染。 */
         val isMarkdown: Boolean = false
+    ) : PreviewState()
+
+    /** HTML 源码；UI 默认静态渲染，完整网页能力必须由用户在当前会话显式开启。 */
+    data class Html(
+        override val key: String,
+        override val name: String,
+        val content: String
     ) : PreviewState()
 
     data class Image(

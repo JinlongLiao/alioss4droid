@@ -23,6 +23,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.PrivacyTip
@@ -75,6 +78,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -82,8 +86,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.data.ProfileBackupCodec
 import io.github.jinlongliao.ossbrowser.data.ThemeMode
+import io.github.jinlongliao.ossbrowser.data.ThemePalette
 import io.github.jinlongliao.ossbrowser.ui.profile.ProfileViewModel
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import java.io.File
@@ -107,6 +113,8 @@ fun SettingsScreen(
     val profileVm: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory)
 
     var showThemeDialog by remember { mutableStateOf(false) }
+    /** 是否展示独立于明暗模式的配色主题选择弹窗。 */
+    var showPaletteDialog by remember { mutableStateOf(false) }
     var showLangDialog by remember { mutableStateOf(false) }
     var showPageSizeDialog by remember { mutableStateOf(false) }
     var showTextMaxDialog by remember { mutableStateOf(false) }
@@ -212,6 +220,12 @@ fun SettingsScreen(
 
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_appearance))
+            SettingRow(
+                icon = Icons.Outlined.Palette,
+                title = stringResource(R.string.settings_color_theme),
+                subtitle = paletteLabel(settings.themePalette),
+                onClick = { showPaletteDialog = true }
+            )
             SettingRow(
                 icon = Icons.Outlined.Brightness6,
                 title = stringResource(R.string.settings_theme),
@@ -329,6 +343,20 @@ fun SettingsScreen(
             selected = settings.themeMode,
             onSelect = { vm.setThemeMode(it); showThemeDialog = false },
             onDismiss = { showThemeDialog = false }
+        )
+    }
+
+    if (showPaletteDialog) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_color_theme),
+            options = listOf(
+                stringResource(R.string.settings_color_theme_default) to ThemePalette.DEFAULT,
+                stringResource(R.string.settings_color_theme_gemini) to ThemePalette.GEMINI,
+                stringResource(R.string.settings_color_theme_summer_sky) to ThemePalette.SUMMER_SKY
+            ),
+            selected = settings.themePalette,
+            onSelect = { vm.setThemePalette(it); showPaletteDialog = false },
+            onDismiss = { showPaletteDialog = false }
         )
     }
 
@@ -526,6 +554,14 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
 }
 
+/** 返回当前 Locale 下的配色主题名称。 */
+@Composable
+private fun paletteLabel(palette: ThemePalette): String = when (palette) {
+    ThemePalette.DEFAULT -> stringResource(R.string.settings_color_theme_default)
+    ThemePalette.GEMINI -> stringResource(R.string.settings_color_theme_gemini)
+    ThemePalette.SUMMER_SKY -> stringResource(R.string.settings_color_theme_summer_sky)
+}
+
 @Composable
 private fun languageLabel(tag: String): String = when (tag) {
     "" -> stringResource(R.string.settings_language_system)
@@ -561,20 +597,26 @@ private fun SettingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
+        TonalIcon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
             tint = MaterialTheme.colorScheme.primary
         )
         Column(Modifier.padding(start = 16.dp).fillMaxWidth()) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (!subtitle.isNullOrBlank()) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -591,14 +633,16 @@ private fun SettingSwitch(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .clickable { onChange(!checked) }
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
+        TonalIcon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(24.dp),
             tint = MaterialTheme.colorScheme.primary
         )
         Column(
@@ -608,7 +652,11 @@ private fun SettingSwitch(
         ) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (!subtitle.isNullOrBlank()) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         Switch(checked = checked, onCheckedChange = onChange)

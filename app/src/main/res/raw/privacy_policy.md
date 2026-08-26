@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective date: 2026-04-24
+Effective date: 2026-08-26
 
 ## 1. Who we are
 
@@ -9,16 +9,23 @@ The source code is released under the Apache License 2.0.
 
 ## 2. How we handle your information
 
-This app **does not upload, collect or analyze** any personal data, usage
-behavior or device identifier.
+This app itself **does not collect or analyze** personal data, usage behavior
+or device identifiers. Network features you explicitly enable can contact the
+service described below.
 
 - **Access keys (AccessKey ID / Secret)**: stored **only on device** through
   Android Jetpack Security (`EncryptedSharedPreferences`) with AES-256
   encryption. They are never sent to any third-party server.
-- **Network traffic**: all OSS requests go **directly** to the Aliyun OSS
+- **OSS traffic**: all OSS requests go **directly** to the Aliyun OSS
   endpoints (`*.aliyuncs.com`) via the official SDK. What is sent between
   your device and Aliyun is governed by Aliyun's own privacy policy.
-- **Preview cache**: image previews use Coil for local caching. You can
+- **Summer Sky theme**: when you select this theme, its wallpaper is downloaded
+  from `haowallpaper.com`. That server can receive ordinary network metadata
+  such as your IP address. Coil stores a private local copy for later use.
+- **Full HTML preview**: safe static preview does not load external resources.
+  If you explicitly enable full preview for the current file, its JavaScript
+  and HTTPS external resources may contact domains specified by that HTML.
+- **Preview and theme cache**: image previews and the Summer Sky wallpaper use Coil for local caching. You can
   clear it any time from *Settings → Clear preview cache*.
 - **Analytics / crash reporting**: this app does **not** integrate any
   third-party analytics, crash reporting, advertising or tracking SDK.
@@ -31,7 +38,8 @@ behavior or device identifier.
 
 ## 4. Permissions
 
-- **Internet**: to reach Aliyun OSS over HTTPS
+- **Internet**: to reach Aliyun OSS, download the optional Summer Sky wallpaper,
+  and load external resources that you explicitly allow in full HTML preview
 - **Read / write storage**: via the system Storage Access Framework (SAF)
   when you upload / download a file. The app never scans your filesystem.
 

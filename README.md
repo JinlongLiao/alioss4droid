@@ -44,13 +44,15 @@
 - Upload (SAF, with progress), download (`CREATE_DOCUMENT` lets you pick destination), delete,
   move / rename (recursive for folders).
 - Destructive actions (delete / move) have a confirmation dialog — can be disabled in Settings.
-- Generate presigned download URLs with an hour-granularity expiry (1–168h), with Copy / Share.
+- Generate signed temporary URLs (1–168h) or unsigned public URLs; public links can use enabled
+  custom Bucket domains returned by OSS, with Copy / Share.
 
 ### File preview
 
 | Kind | Implementation |
 | --- | --- |
 | Text (txt / json / xml / yaml / md / groovy / gradle / kts / plist / dart / scala / hcl …) | Streams into memory (size cap is configurable), `SelectionContainer` for copy. |
+| HTML (html / htm / xhtml) | Safe static WebView rendering; JavaScript and HTTPS external resources require confirmation for the current preview session. |
 | Image (jpg / png / webp / gif / bmp …) | Coil + `coil-gif`, fetched via presigned URL. |
 | Audio / Video | Media3 ExoPlayer, embedded playback with pause / seek / progress bar. |
 | PDF | `PdfRenderer` page-by-page bitmap rendering. |
@@ -58,8 +60,9 @@
 ### Internationalization & look
 
 - English / 简体中文 / 繁體中文; follows system locale by default, switchable in Settings.
-- Light / Dark / Follow-system themes.
-- Per-extension file icons (colored); unknown types fall back to a generic icon.
+- Independent appearance controls: Default / Gemini / Summer Sky palettes plus Light / Dark / Follow-system modes.
+- Summer Sky downloads its wallpaper once into the app-private cache, then prefers the cached copy or a local gradient fallback.
+- Per-extension file icons use Material 3 tonal containers and rounded list cards; unknown types fall back to a generic icon.
 
 ---
 
@@ -214,7 +217,9 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md) (English), [docs/USAGE.zh-CN.md
 - Network Security Config only allows cleartext for `*.aliyuncs.com` subdomains; everything else
   must be HTTPS.
 - Recommended RAM sub-account policy: grant only the buckets you intend to access, with
-  `ListObjects`, `GetObject`, `PutObject`, `DeleteObject`.
+  `ListObjects`, `GetObject`, `PutObject`, `DeleteObject`. Grant `oss:ListCname` only when the app
+  needs to discover custom Bucket domains; without it, public-link generation falls back to the
+  standard OSS public domain.
 
 ---
 

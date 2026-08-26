@@ -33,9 +33,19 @@ class SettingsRepository(context: Context) {
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
+    /**
+     * 从本地偏好恢复完整设置。
+     *
+     * 新增枚举值读取失败或旧版本尚未写入对应键时均回退默认值，保证应用升级兼容。
+     *
+     * @return 可直接发布给界面使用的设置快照。
+     */
     private fun load(): AppSettings = AppSettings(
         themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME, null) ?: "") }
             .getOrDefault(ThemeMode.SYSTEM),
+        themePalette = runCatching {
+            ThemePalette.valueOf(prefs.getString(KEY_THEME_PALETTE, null) ?: "")
+        }.getOrDefault(ThemePalette.DEFAULT),
         pageSize = prefs.getInt(KEY_PAGE_SIZE, 10),
         textPreviewMaxBytes = prefs.getLong(KEY_TEXT_MAX, 2L * 1024 * 1024),
         autoPlayMedia = prefs.getBoolean(KEY_AUTO_PLAY, true),
@@ -45,10 +55,16 @@ class SettingsRepository(context: Context) {
         languageTag = prefs.getString(KEY_LANGUAGE, "") ?: ""
     )
 
+    /**
+     * 原子计算并持久化下一份设置快照，然后同步通知观察者。
+     *
+     * @param transform 基于当前快照生成新快照的同步转换函数。
+     */
     fun update(transform: (AppSettings) -> AppSettings) {
         val next = transform(_settings.value)
         prefs.edit()
             .putString(KEY_THEME, next.themeMode.name)
+            .putString(KEY_THEME_PALETTE, next.themePalette.name)
             .putInt(KEY_PAGE_SIZE, next.pageSize)
             .putLong(KEY_TEXT_MAX, next.textPreviewMaxBytes)
             .putBoolean(KEY_AUTO_PLAY, next.autoPlayMedia)
@@ -69,6 +85,8 @@ class SettingsRepository(context: Context) {
     companion object {
         const val PREFS_NAME = "oss_browser_settings"
         const val KEY_THEME = "theme_mode"
+        /** 独立于明暗模式的配色主题持久化键。 */
+        const val KEY_THEME_PALETTE = "theme_palette"
         const val KEY_PAGE_SIZE = "page_size"
         const val KEY_TEXT_MAX = "text_preview_max"
         const val KEY_AUTO_PLAY = "auto_play_media"

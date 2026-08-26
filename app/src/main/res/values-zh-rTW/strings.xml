@@ -79,12 +79,22 @@
     <string name="nav_path_help">• 以 / 結尾 → 進入該目錄\n• 檔案路徑 → 跳到其所在目錄並定位該檔案\n• 留空 → 回到 bucket 根</string>
     <string name="nav_path_confirm">跳轉</string>
 
-    <string name="presign_dialog_title">產生臨時下載連結</string>
+    <string name="presign_dialog_title">產生分享連結</string>
     <string name="presign_file_label">檔案: %1$s</string>
+    <string name="share_mode_signed">臨時簽名連結</string>
+    <string name="share_mode_public">公開連結（不使用簽名）</string>
     <string name="presign_expire_label">有效期（小時，1~168）</string>
     <string name="presign_expire_help">OSS 預簽連結上限為 7 天（168 小時）。</string>
-    <string name="presign_result_title">臨時連結已產生</string>
+    <string name="share_domain_title">存取網域</string>
+    <string name="share_domain_default">OSS 預設公網網域</string>
+    <string name="share_cname_loading">正在取得自訂網域…</string>
+    <string name="share_cname_empty">未取得已啟用的自訂網域，仍可使用 OSS 預設公網網域。</string>
+    <string name="share_cname_failed">取得自訂網域失敗，請檢查 oss:ListCname 權限或稍後重試。仍可使用 OSS 預設公網網域。</string>
+    <string name="share_public_help">僅當 Bucket 或 Object 允許匿名讀取時，公開連結才能正常存取。</string>
+    <string name="presign_result_title">分享連結已產生</string>
     <string name="presign_result_expire">有效期 %1$d 小時</string>
+    <string name="share_result_public_default">公開連結 · OSS 預設網域 · 連結無過期時間</string>
+    <string name="share_result_public_cname">公開連結 · %1$s · 連結無過期時間</string>
 
     <string name="move_title_folder">移動目錄 / 重新命名</string>
     <string name="move_title_file">移動檔案 / 重新命名</string>
@@ -134,6 +144,11 @@
     <string name="preview_choose_player">選擇播放器</string>
     <string name="preview_toggle_markdown_rich">以 Markdown 繪製</string>
     <string name="preview_toggle_markdown_source">檢視原始碼</string>
+    <string name="preview_html_switch_full">開啟完整網頁預覽</string>
+    <string name="preview_html_switch_safe">返回安全靜態預覽</string>
+    <string name="preview_html_full_confirm_title">開啟完整網頁預覽？</string>
+    <string name="preview_html_full_confirm_message">這將允許目前 HTML 檔案執行 JavaScript 並載入 HTTPS 外部資源。不受信任的頁面可能執行腳本或向外部伺服器傳送資料；檔案存取、混合內容和頁面導向仍會被禁止。</string>
+    <string name="preview_html_enable_full">僅本次預覽開啟</string>
     <string name="preview_docx_failed">DOCX 解析失敗（不支援的格式或檔案損毀）。</string>
     <string name="preview_docx_empty">此文件內容為空。</string>
     <string name="preview_loading_title">正在載入預覽…</string>
@@ -175,6 +190,10 @@
     <string name="settings_section_about">關於</string>
 
     <string name="settings_theme">主題模式</string>
+    <string name="settings_color_theme">主題配色</string>
+    <string name="settings_color_theme_default">預設</string>
+    <string name="settings_color_theme_gemini">Gemini</string>
+    <string name="settings_color_theme_summer_sky">夏日晴空（by Strivy）</string>
     <string name="settings_theme_system">跟隨系統</string>
     <string name="settings_theme_light">淺色</string>
     <string name="settings_theme_dark">深色</string>

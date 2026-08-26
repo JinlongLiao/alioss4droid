@@ -15,10 +15,14 @@
  */
 package io.github.jinlongliao.ossbrowser.ui.browser
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -26,6 +30,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +61,8 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Article
 import androidx.compose.material.icons.outlined.Code
@@ -72,6 +79,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -83,6 +91,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -100,6 +109,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -129,7 +139,9 @@ import coil.request.ImageRequest
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
+import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.iconForFileName
 import io.github.jinlongliao.ossbrowser.ui.settings.MarkdownText
@@ -257,20 +269,20 @@ fun BrowserScreen(
                 },
                 actions = {
                     if (inBucketView) {
-                        IconButton(onClick = { dialog = BrowserDialog.NavigatePath }) {
+                        FilledTonalIconButton(onClick = { dialog = BrowserDialog.NavigatePath }) {
                             Icon(
                                 Icons.Outlined.Search,
                                 contentDescription = stringResource(R.string.browser_jump_path)
                             )
                         }
                     }
-                    IconButton(onClick = { vm.refresh() }) {
+                    FilledTonalIconButton(onClick = { vm.refresh() }) {
                         Icon(
                             Icons.Filled.Refresh,
                             contentDescription = stringResource(R.string.common_refresh)
                         )
                     }
-                    IconButton(onClick = onOpenProfiles) {
+                    FilledTonalIconButton(onClick = onOpenProfiles) {
                         Icon(
                             Icons.Outlined.VpnKey,
                             contentDescription = stringResource(R.string.cd_keys)
@@ -380,7 +392,6 @@ fun BrowserScreen(
                                 bucket = b,
                                 onOpen = { vm.selectBucket(b.name, b.extranetEndpoint) }
                             )
-                            HorizontalDivider()
                         }
                     }
                 }
@@ -425,7 +436,8 @@ fun BrowserScreen(
                             },
                             onPresign = {
                                 if (item is OssObjectItem.File) {
-                                    dialog = BrowserDialog.Presign(item)
+                                    vm.clearCustomDomains()
+                                    dialog = BrowserDialog.ShareLink(item)
                                 }
                             },
                             onDelete = {
@@ -437,7 +449,6 @@ fun BrowserScreen(
                             },
                             onMove = { dialog = BrowserDialog.Move(item) }
                         )
-                        HorizontalDivider()
                     }
                     item(key = "__footer__") {
                         ListFooter(
@@ -512,21 +523,27 @@ fun BrowserScreen(
                 dialog = null
             }
         )
-        is BrowserDialog.Presign -> PresignInputDialog(
+        is BrowserDialog.ShareLink -> ShareLinkInputDialog(
             item = d.item,
-            onDismiss = { dialog = null },
-            onConfirm = { hours ->
-                vm.presignUrl(d.item.key, hours)
+            customDomainLookup = state.customDomainLookup,
+            onPublicModeSelected = { vm.loadCustomDomains() },
+            onDismiss = {
+                vm.clearCustomDomains()
+                dialog = null
+            },
+            onConfirm = { mode, hours, customDomain ->
+                vm.generateShareUrl(d.item.key, mode, hours, customDomain)
+                vm.clearCustomDomains()
                 dialog = null
             }
         )
         null -> Unit
     }
 
-    state.presignResult?.let { result ->
-        PresignResultDialog(
+    state.shareLinkResult?.let { result ->
+        ShareLinkResultDialog(
             result = result,
-            onDismiss = { vm.clearPresignResult() }
+            onDismiss = { vm.clearShareLinkResult() }
         )
     }
 
@@ -551,7 +568,8 @@ fun BrowserScreen(
             onPresign = {
                 val file = vm.currentPreviewItem() ?: return@PreviewDialog
                 vm.closePreview()
-                dialog = BrowserDialog.Presign(file)
+                vm.clearCustomDomains()
+                dialog = BrowserDialog.ShareLink(file)
             }
         )
     }
@@ -567,7 +585,7 @@ private sealed class BrowserDialog {
         val destPrefix: String,
         val newName: String?
     ) : BrowserDialog()
-    data class Presign(val item: OssObjectItem.File) : BrowserDialog()
+    data class ShareLink(val item: OssObjectItem.File) : BrowserDialog()
 }
 
 @Composable
@@ -614,11 +632,14 @@ private fun BucketRow(bucket: OssBucketInfo, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onOpen)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        TonalIcon(Icons.Filled.Storage, contentDescription = null)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(bucket.name, fontWeight = FontWeight.Medium)
             val meta = buildList {
@@ -627,10 +648,18 @@ private fun BucketRow(bucket: OssBucketInfo, onOpen: () -> Unit) {
                 bucket.createDate?.let { add(formatDateTime(it)) }
             }.joinToString("  ·  ")
             if (meta.isNotEmpty()) {
-                Text(meta, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             bucket.extranetEndpoint?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -651,10 +680,13 @@ private fun ObjectRow(
         is OssObjectItem.Folder -> onOpen
         is OssObjectItem.File -> onPreview
     }
-    val bg = if (highlighted) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    val bg = if (highlighted) MaterialTheme.colorScheme.primaryContainer
+    else MaterialTheme.colorScheme.surface
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(18.dp))
             .background(bg)
             .clickable(onClick = rowClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -667,7 +699,12 @@ private fun ObjectRow(
                 spec.icon to spec.tint
             }
         }
-        Icon(iconVec, contentDescription = null, tint = iconTint)
+        TonalIcon(
+            imageVector = iconVec,
+            contentDescription = null,
+            tint = iconTint,
+            containerColor = iconTint.copy(alpha = 0.14f)
+        )
         val formatDateTime = rememberLocalDateTimeFormatter()
         val folderLabel = stringResource(R.string.browser_item_folder_label)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -677,12 +714,12 @@ private fun ObjectRow(
                     FileUtils.humanSize(item.size) +
                             (item.lastModified?.let { "  ·  ${formatDateTime(it)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 is OssObjectItem.Folder -> Text(
                     folderLabel,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -838,15 +875,24 @@ private fun MkdirDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     )
 }
 
+/**
+ * 分享链接配置弹窗：签名链接保留原有有效期输入；公开链接按需查询并列出可选自定义域名。
+ * 自定义域名查询失败不禁用生成按钮，用户仍可使用 OSS 默认公网域名。
+ */
 @Composable
-private fun PresignInputDialog(
+private fun ShareLinkInputDialog(
     item: OssObjectItem.File,
+    customDomainLookup: CustomDomainLookupState,
+    onPublicModeSelected: () -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (hours: Int) -> Unit
+    onConfirm: (mode: ShareLinkMode, hours: Int?, customDomain: OssCnameInfo?) -> Unit
 ) {
     var hoursText by remember { mutableStateOf("1") }
+    var mode by remember { mutableStateOf(ShareLinkMode.SIGNED) }
+    var selectedDomain by remember { mutableStateOf<String?>(null) }
     val hours = hoursText.toIntOrNull()
-    val valid = hours != null && hours in 1..168 // OSS 最长 7 天
+    val valid = mode == ShareLinkMode.PUBLIC || hours != null && hours in 1..168 // OSS 最长 7 天
+    val customDomain = customDomainLookup.domains.firstOrNull { it.domain == selectedDomain }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -858,23 +904,77 @@ private fun PresignInputDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
-                OutlinedTextField(
-                    value = hoursText,
-                    onValueChange = { hoursText = it.filter { c -> c.isDigit() } },
-                    label = { Text(stringResource(R.string.presign_expire_label)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                ShareModeOption(
+                    selected = mode == ShareLinkMode.SIGNED,
+                    label = stringResource(R.string.share_mode_signed),
+                    onClick = { mode = ShareLinkMode.SIGNED }
                 )
-                Text(
-                    stringResource(R.string.presign_expire_help),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
+                ShareModeOption(
+                    selected = mode == ShareLinkMode.PUBLIC,
+                    label = stringResource(R.string.share_mode_public),
+                    onClick = {
+                        mode = ShareLinkMode.PUBLIC
+                        onPublicModeSelected()
+                    }
                 )
+                if (mode == ShareLinkMode.SIGNED) {
+                    OutlinedTextField(
+                        value = hoursText,
+                        onValueChange = { hoursText = it.filter { c -> c.isDigit() } },
+                        label = { Text(stringResource(R.string.presign_expire_label)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Text(
+                        stringResource(R.string.presign_expire_help),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.share_domain_title),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    ShareModeOption(
+                        selected = selectedDomain == null,
+                        label = stringResource(R.string.share_domain_default),
+                        onClick = { selectedDomain = null }
+                    )
+                    customDomainLookup.domains.forEach { cname ->
+                        ShareModeOption(
+                            selected = selectedDomain == cname.domain,
+                            label = "${cname.scheme}://${cname.domain}",
+                            onClick = { selectedDomain = cname.domain }
+                        )
+                    }
+                    when {
+                        customDomainLookup.loading -> Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp))
+                            Text(
+                                stringResource(R.string.share_cname_loading),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        customDomainLookup.warning != null -> Text(
+                            customDomainLookup.warning,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.share_public_help),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { hours?.let(onConfirm) },
+                onClick = { onConfirm(mode, hours, customDomain) },
                 enabled = valid
             ) { Text(stringResource(R.string.common_generate)) }
         },
@@ -884,9 +984,27 @@ private fun PresignInputDialog(
     )
 }
 
+/** 单个分享方式或域名选项，整行均可点击。 */
 @Composable
-private fun PresignResultDialog(
-    result: PresignResult,
+private fun ShareModeOption(
+    selected: Boolean,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Text(label)
+    }
+}
+
+/** 展示已生成的签名或公开链接，并提供复制与系统分享入口。 */
+@Composable
+private fun ShareLinkResultDialog(
+    result: ShareLinkResult,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -902,11 +1020,23 @@ private fun PresignResultDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
-                Text(
-                    stringResource(R.string.presign_result_expire, result.expireHours),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
-                )
+                if (result.expireHours != null) {
+                    Text(
+                        stringResource(R.string.presign_result_expire, result.expireHours),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                } else {
+                    Text(
+                        if (result.customDomain == null) {
+                            stringResource(R.string.share_result_public_default)
+                        } else {
+                            stringResource(R.string.share_result_public_cname, result.customDomain)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
                 OutlinedTextField(
                     value = result.url,
                     onValueChange = {},
@@ -1065,6 +1195,9 @@ private fun PreviewDialog(
     var renderMarkdown by remember(state.key) {
         mutableStateOf(state is PreviewState.Text && state.isMarkdown)
     }
+    // 完整网页能力只对当前文件的本次预览有效；关闭或切换文件后恢复安全静态模式。
+    var fullHtmlPreview by remember(state.key) { mutableStateOf(false) }
+    var showFullHtmlConfirmation by remember(state.key) { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1111,6 +1244,35 @@ private fun PreviewDialog(
                                             contentDescription = switchDesc
                                         )
                                     }
+                                }
+                                val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
+                                IconButton(onClick = {
+                                    clipboard.setText(AnnotatedString(state.content))
+                                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(
+                                        Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.common_copy)
+                                    )
+                                }
+                            }
+                            is PreviewState.Html -> {
+                                IconButton(onClick = {
+                                    if (fullHtmlPreview) {
+                                        fullHtmlPreview = false
+                                    } else {
+                                        showFullHtmlConfirmation = true
+                                    }
+                                }) {
+                                    Icon(
+                                        imageVector = if (fullHtmlPreview) Icons.Outlined.Shield
+                                        else Icons.Outlined.Public,
+                                        contentDescription = if (fullHtmlPreview) {
+                                            stringResource(R.string.preview_html_switch_safe)
+                                        } else {
+                                            stringResource(R.string.preview_html_switch_full)
+                                        }
+                                    )
                                 }
                                 val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
                                 IconButton(onClick = {
@@ -1196,6 +1358,11 @@ private fun PreviewDialog(
                                 TextPreviewBody(content = state.content)
                             }
 
+                        is PreviewState.Html -> HtmlPreviewBody(
+                            content = state.content,
+                            fullWebPreview = fullHtmlPreview
+                        )
+
                         is PreviewState.Docx -> DocxPreviewBody(paragraphs = state.paragraphs)
 
                         is PreviewState.Image -> ImagePreviewBody(url = state.url)
@@ -1226,6 +1393,27 @@ private fun PreviewDialog(
                 }
             }
         }
+    }
+
+    if (showFullHtmlConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFullHtmlConfirmation = false },
+            title = { Text(stringResource(R.string.preview_html_full_confirm_title)) },
+            text = { Text(stringResource(R.string.preview_html_full_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    fullHtmlPreview = true
+                    showFullHtmlConfirmation = false
+                }) {
+                    Text(stringResource(R.string.preview_html_enable_full))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFullHtmlConfirmation = false }) {
+                    Text(stringResource(R.string.common_cancel))
+                }
+            }
+        )
     }
 }
 
@@ -1261,6 +1449,64 @@ private fun MarkdownPreviewBody(content: String) {
             MarkdownText(source = content)
         }
     }
+}
+
+/**
+ * 使用 WebView 渲染 HTML 内容。
+ *
+ * 安全静态模式禁用 JavaScript、DOM 存储、文件/Content URI 访问及所有外部网络请求，
+ * 仅呈现文档内联 HTML/CSS。完整网页模式经用户确认后开启 JavaScript、DOM 存储和
+ * HTTPS 外部资源，但仍禁止文件访问、混合内容与主页面跳转；不向页面注入原生接口。
+ * WebView 在离开预览时主动销毁，避免脚本或网络任务越过当前会话继续运行。
+ *
+ * @param content UTF-8 HTML 源码。
+ * @param fullWebPreview 是否启用当前会话的完整网页能力。
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun HtmlPreviewBody(content: String, fullWebPreview: Boolean) {
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = { context ->
+            WebView(context).apply {
+                webViewClient = object : WebViewClient() {
+                    /** 阻止点击或脚本把主页面导航到其他地址；子资源仍由网络策略单独控制。 */
+                    override fun shouldOverrideUrlLoading(
+                        view: WebView?,
+                        request: WebResourceRequest?
+                    ): Boolean = true
+                }
+            }
+        },
+        update = { webView ->
+            val modeTag = if (fullWebPreview) "full" else "safe"
+            val contentTag = "$modeTag:${content.hashCode()}"
+            if (webView.tag == contentTag) return@AndroidView
+            webView.tag = contentTag
+            webView.settings.apply {
+                javaScriptEnabled = fullWebPreview
+                domStorageEnabled = fullWebPreview
+                blockNetworkLoads = !fullWebPreview
+                allowFileAccess = false
+                allowContentAccess = false
+                javaScriptCanOpenWindowsAutomatically = false
+                setSupportMultipleWindows(false)
+                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            }
+            webView.loadDataWithBaseURL(
+                null,
+                content,
+                "text/html",
+                Charsets.UTF_8.name(),
+                null
+            )
+        },
+        onRelease = { webView ->
+            webView.stopLoading()
+            webView.loadUrl("about:blank")
+            webView.destroy()
+        }
+    )
 }
 
 @Composable
