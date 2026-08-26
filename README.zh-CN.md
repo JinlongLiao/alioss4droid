@@ -27,6 +27,8 @@
 
 - 多套 OSS 账号（AK/SK + Endpoint）管理：新增 / 编辑 / 删除 / 切换激活
 - `EncryptedSharedPreferences`（AES‑256‑GCM，Android Keystore 派生密钥）加密落盘
+- 可选内置阿里云网页控制台：记住账号类型与账号名、保留 WebView Cookie，密码交由
+  系统自动填充处理，App 不读取或保存密码与 MFA 验证码
 - 按 profile + endpoint 缓存 OSSClient，支持跨 region 的 bucket 访问
 - 隐私协议首次启动强制同意；设置中提供隐私政策 / 开源协议 / 第三方许可查看
 

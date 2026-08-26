@@ -86,10 +86,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.BuildConfig
 import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.data.ProfileBackupCodec
 import io.github.jinlongliao.ossbrowser.data.ThemeMode
 import io.github.jinlongliao.ossbrowser.data.ThemePalette
+import io.github.jinlongliao.ossbrowser.data.WebBrowserEngine
 import io.github.jinlongliao.ossbrowser.ui.profile.ProfileViewModel
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import java.io.File
@@ -118,6 +120,8 @@ fun SettingsScreen(
     var showLangDialog by remember { mutableStateOf(false) }
     var showPageSizeDialog by remember { mutableStateOf(false) }
     var showTextMaxDialog by remember { mutableStateOf(false) }
+    /** 是否展示网页控制台浏览器引擎选择弹窗。 */
+    var showWebBrowserEngineDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var exportDialogOpen by remember { mutableStateOf(false) }
     var importDialogOpen by remember { mutableStateOf(false) }
@@ -242,6 +246,21 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_browse))
             SettingRow(
+                icon = Icons.Outlined.Language,
+                title = stringResource(R.string.settings_web_browser_engine),
+                subtitle = when (settings.webBrowserEngine) {
+                    WebBrowserEngine.SYSTEM_WEBVIEW ->
+                        stringResource(R.string.settings_web_browser_engine_system)
+                    WebBrowserEngine.GECKOVIEW ->
+                        stringResource(R.string.settings_web_browser_engine_gecko)
+                },
+                onClick = {
+                    if (BuildConfig.HAS_GECKOVIEW) {
+                        showWebBrowserEngineDialog = true
+                    }
+                }
+            )
+            SettingRow(
                 icon = Icons.Outlined.FolderOpen,
                 title = stringResource(R.string.settings_page_size),
                 subtitle = stringResource(R.string.settings_page_size_value, settings.pageSize),
@@ -272,6 +291,13 @@ fun SettingsScreen(
                 subtitle = stringResource(R.string.settings_confirm_destructive_desc),
                 checked = settings.confirmDestructiveOps,
                 onChange = vm::setConfirmDestructive
+            )
+            SettingSwitch(
+                icon = Icons.Outlined.PrivacyTip,
+                title = stringResource(R.string.settings_web_diagnostics_redaction),
+                subtitle = stringResource(R.string.settings_web_diagnostics_redaction_desc),
+                checked = settings.webDiagnosticsRedactionEnabled,
+                onChange = vm::setWebDiagnosticsRedaction
             )
 
             SectionDivider()
@@ -395,6 +421,24 @@ fun SettingsScreen(
             selected = settings.pageSize,
             onSelect = { vm.setPageSize(it); showPageSizeDialog = false },
             onDismiss = { showPageSizeDialog = false }
+        )
+    }
+
+    if (showWebBrowserEngineDialog && BuildConfig.HAS_GECKOVIEW) {
+        SingleChoiceDialog(
+            title = stringResource(R.string.settings_web_browser_engine),
+            options = listOf(
+                stringResource(R.string.settings_web_browser_engine_system) to
+                    WebBrowserEngine.SYSTEM_WEBVIEW,
+                stringResource(R.string.settings_web_browser_engine_gecko) to
+                    WebBrowserEngine.GECKOVIEW
+            ),
+            selected = settings.webBrowserEngine,
+            onSelect = {
+                vm.setWebBrowserEngine(it)
+                showWebBrowserEngineDialog = false
+            },
+            onDismiss = { showWebBrowserEngineDialog = false }
         )
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -47,6 +48,7 @@ import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import io.github.jinlongliao.ossbrowser.OssBrowserApp
+import io.github.jinlongliao.ossbrowser.BuildConfig
 import io.github.jinlongliao.ossbrowser.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -65,9 +67,13 @@ import io.github.jinlongliao.ossbrowser.ui.settings.SettingsViewModel
 import io.github.jinlongliao.ossbrowser.ui.theme.LocalBrandGradient
 import io.github.jinlongliao.ossbrowser.ui.theme.LocalAppBackground
 import io.github.jinlongliao.ossbrowser.ui.theme.SUMMER_SKY_BACKGROUND_URL
+import io.github.jinlongliao.ossbrowser.ui.web.AliyunWebConsoleScreen
+import io.github.jinlongliao.ossbrowser.data.WebBrowserEngine
+import io.github.jinlongliao.ossbrowser.ui.web.GeckoAliyunWebConsoleScreen
 
 private object Routes {
     const val BROWSER = "browser"
+    const val ALIYUN_WEB = "aliyun_web"
     const val PROFILES = "profiles"
     const val PROFILE_EDIT = "profile_edit?id={id}"
     const val SETTINGS = "settings"
@@ -87,8 +93,10 @@ fun OssBrowserRoot() {
     val profileState by OssBrowserApp.instance.profileRepository.state.collectAsState()
     val context = LocalContext.current
 
-    // 底部导航：只剩「文件 / 设置」。密钥管理作为设置页中优先级最高的入口呈现。
-    val showBottomBar = currentRoute == Routes.BROWSER || currentRoute == Routes.SETTINGS
+    // 三个一级入口分别承载 AccessKey 直连、阿里云网页登录和本地设置，避免混淆两种认证会话。
+    val showBottomBar = currentRoute == Routes.BROWSER ||
+        currentRoute == Routes.ALIYUN_WEB ||
+        currentRoute == Routes.SETTINGS
 
     val appBackground = LocalAppBackground.current
     Box(
@@ -145,6 +153,23 @@ fun OssBrowserRoot() {
                             label = { Text(stringResource(R.string.nav_files)) }
                         )
                         NavigationBarItem(
+                            selected = currentRoute == Routes.ALIYUN_WEB,
+                            onClick = {
+                                if (currentRoute != Routes.ALIYUN_WEB) {
+                                    navController.navigate(Routes.ALIYUN_WEB) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                            },
+                            icon = {
+                                ThemedNavigationIcon(
+                                    imageVector = Icons.Outlined.Language,
+                                    selected = currentRoute == Routes.ALIYUN_WEB
+                                )
+                            },
+                            label = { Text(stringResource(R.string.nav_aliyun_web)) }
+                        )
+                        NavigationBarItem(
                             selected = backStack?.destination?.hierarchy?.any {
                                 it.route?.startsWith("settings") == true ||
                                     it.route?.startsWith("profile") == true
@@ -187,6 +212,27 @@ fun OssBrowserRoot() {
                         onAdd = { navController.navigate(Routes.profileEdit(null)) },
                         onEdit = { id -> navController.navigate(Routes.profileEdit(id)) }
                     )
+                }
+                composable(Routes.ALIYUN_WEB) {
+                    when (settings.webBrowserEngine) {
+                        WebBrowserEngine.SYSTEM_WEBVIEW -> AliyunWebConsoleScreen(
+                            settings = settings,
+                            onSaveAccount = settingsVm::setAliyunWebAccount
+                        )
+                        WebBrowserEngine.GECKOVIEW -> {
+                            if (BuildConfig.HAS_GECKOVIEW) {
+                                GeckoAliyunWebConsoleScreen(
+                                    settings = settings,
+                                    onSaveAccount = settingsVm::setAliyunWebAccount
+                                )
+                            } else {
+                                AliyunWebConsoleScreen(
+                                    settings = settings,
+                                    onSaveAccount = settingsVm::setAliyunWebAccount
+                                )
+                            }
+                        }
+                    }
                 }
                 composable(Routes.PROFILE_EDIT) { entry ->
                     val id = entry.arguments?.getString("id")?.takeIf { it.isNotBlank() }

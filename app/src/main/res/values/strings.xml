@@ -21,11 +21,57 @@
     <string name="common_create">Create</string>
     <string name="common_generate">Generate</string>
     <string name="common_open_failed">Cannot open link</string>
+    <string name="common_more">More</string>
+    <string name="common_clear">Clear</string>
+    <string name="common_retry">Retry</string>
 
     <!-- Navigation -->
     <string name="nav_files">Files</string>
     <string name="nav_profiles">Keys</string>
+    <string name="nav_aliyun_web">Aliyun</string>
     <string name="nav_settings">Settings</string>
+
+    <!-- Alibaba Cloud web console -->
+    <string name="aliyun_web_title">Alibaba Cloud</string>
+    <string name="aliyun_web_account">Web account</string>
+    <string name="aliyun_web_site">Website</string>
+    <string name="aliyun_web_site_china">China site (default)</string>
+    <string name="aliyun_web_site_international">International site</string>
+    <string name="aliyun_web_account_type">Account type</string>
+    <string name="aliyun_web_account_main">Alibaba Cloud account</string>
+    <string name="aliyun_web_account_ram">RAM user</string>
+    <string name="aliyun_web_username">Account name</string>
+    <string name="aliyun_web_ram_username_hint">Enter the full RAM logon name, such as user@company.onaliyun.com.</string>
+    <string name="aliyun_web_main_username_hint">Saved for reference. The Alibaba Cloud page decides whether it can be prefilled.</string>
+    <string name="aliyun_web_password_notice">Passwords are handled by the system autofill service. This app does not read or save passwords or MFA codes.</string>
+    <string name="aliyun_web_save_and_login">Save and sign in</string>
+    <string name="aliyun_web_open_oss">Open OSS console</string>
+    <string name="aliyun_web_system_browser">Open in system browser</string>
+    <string name="aliyun_web_clear_session">Sign out and clear web data</string>
+    <string name="aliyun_web_clear_session_confirm">Clear Alibaba Cloud cookies, website storage, history, and WebView cache? The saved account name is kept for the next sign-in.</string>
+    <string name="aliyun_web_open_failed">No browser can open this page.</string>
+    <string name="aliyun_web_diagnostics">WebView diagnostics</string>
+    <string name="aliyun_web_diagnostic_current_url">Current URL: %1$s</string>
+    <string name="aliyun_web_diagnostic_webview_version">WebView version: %1$s</string>
+    <string name="aliyun_web_diagnostic_load_duration">Last load: %1$s</string>
+    <string name="aliyun_web_diagnostic_duration_value">%1$d ms</string>
+    <string name="aliyun_web_diagnostic_cookies">Cookies: %1$s</string>
+    <string name="aliyun_web_diagnostic_cookie_policy_value">accepted=%1$s, third-party=%2$s</string>
+    <string name="aliyun_web_diagnostic_cookie_value_hidden">hidden</string>
+    <string name="aliyun_web_diagnostic_recent_events">Recent events:</string>
+    <string name="aliyun_web_diagnostic_no_events">No events</string>
+    <string name="aliyun_web_diagnostic_none">None</string>
+    <string name="aliyun_web_diagnostic_copy">Copy diagnostics</string>
+    <string name="aliyun_web_diagnostic_copied">Sanitized diagnostics copied</string>
+    <string name="aliyun_web_diagnostic_started">Started: %1$s</string>
+    <string name="aliyun_web_diagnostic_finished">Finished in %1$d ms</string>
+    <string name="aliyun_web_diagnostic_popup">Popup: %1$s</string>
+    <string name="aliyun_web_diagnostic_network_error">Network error: %1$d</string>
+    <string name="aliyun_web_diagnostic_http_error">HTTP error: %1$d</string>
+    <string name="aliyun_web_diagnostic_tls_error">TLS error: %1$d</string>
+    <string name="aliyun_web_diagnostic_renderer_gone">Renderer ended; crashed=%1$s</string>
+    <string name="aliyun_web_renderer_unavailable">WebView renderer is unavailable</string>
+    <string name="aliyun_web_renderer_unavailable_desc">The renderer crashed repeatedly. Retry or continue in the system browser.</string>
 
     <!-- Profiles -->
     <string name="profiles_title">OSS Profiles</string>
@@ -218,12 +264,17 @@
     <string name="settings_language_zh_tw">繁體中文</string>
 
     <string name="settings_page_size">Items per page</string>
+    <string name="settings_web_browser_engine">Web browser engine</string>
+    <string name="settings_web_browser_engine_system">System WebView</string>
+    <string name="settings_web_browser_engine_gecko">GeckoView (recommended)</string>
     <string name="settings_page_size_value">%1$d per page</string>
     <string name="settings_text_preview_max">Text preview max size</string>
     <string name="settings_auto_play">Auto-play media</string>
     <string name="settings_auto_play_desc">Start playback automatically when previewing</string>
     <string name="settings_confirm_destructive">Confirm destructive actions</string>
     <string name="settings_confirm_destructive_desc">Ask again before delete / move / rename</string>
+    <string name="settings_web_diagnostics_redaction">Sanitize WebView diagnostics</string>
+    <string name="settings_web_diagnostics_redaction_desc">Hide URL paths and cookie values. When off, only the first and last cookie characters are shown; full values and query parameters remain hidden.</string>
 
     <string name="settings_clear_cache">Clear preview cache</string>
     <string name="settings_clear_cache_desc">Remove temporary files created by preview</string>

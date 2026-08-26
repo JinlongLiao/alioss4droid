@@ -1,8 +1,8 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -20,18 +20,31 @@ val hasDebugKeystore = keystoreProps.getProperty("debugStoreFile")?.let { rootPr
 
 android {
     namespace = "io.github.jinlongliao.ossbrowser"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.jinlongliao.ossbrowser"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
 
         vectorDrawables { useSupportLibrary = true }
 
-        resourceConfigurations += listOf("en", "zh-rCN", "zh-rTW")
+    }
+
+    flavorDimensions += "browserEngine"
+    productFlavors {
+        create("lite") {
+            dimension = "browserEngine"
+            buildConfigField("boolean", "HAS_GECKOVIEW", "false")
+            versionNameSuffix = "-lite"
+        }
+        create("gecko") {
+            dimension = "browserEngine"
+            buildConfigField("boolean", "HAS_GECKOVIEW", "true")
+            versionNameSuffix = "-gecko"
+        }
     }
 
     signingConfigs {
@@ -89,12 +102,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    androidResources {
+        localeFilters += listOf("en", "zh-rCN", "zh-rTW")
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -127,6 +147,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.aliyun.oss.android)
+    // Lite 仅在编译期解析 Gecko API，最终 APK 不携带内核；Gecko 变体才打包完整实现。
+    compileOnly(libs.mozilla.geckoview)
+    "geckoImplementation"(libs.mozilla.geckoview)
 
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)

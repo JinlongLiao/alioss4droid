@@ -17,6 +17,7 @@ package io.github.jinlongliao.ossbrowser.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.jinlongliao.ossbrowser.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,8 +51,24 @@ class SettingsRepository(context: Context) {
         textPreviewMaxBytes = prefs.getLong(KEY_TEXT_MAX, 2L * 1024 * 1024),
         autoPlayMedia = prefs.getBoolean(KEY_AUTO_PLAY, true),
         confirmDestructiveOps = prefs.getBoolean(KEY_CONFIRM, true),
+        webDiagnosticsRedactionEnabled = prefs.getBoolean(KEY_WEB_DIAGNOSTICS_REDACTION, true),
+        webBrowserEngine = if (BuildConfig.HAS_GECKOVIEW) {
+            runCatching {
+                WebBrowserEngine.valueOf(prefs.getString(KEY_WEB_BROWSER_ENGINE, null) ?: "")
+            }.getOrDefault(WebBrowserEngine.SYSTEM_WEBVIEW)
+        } else {
+            // Lite 可能覆盖安装在 Gecko 版之上，不能继续恢复该变体未打包的浏览器内核。
+            WebBrowserEngine.SYSTEM_WEBVIEW
+        },
         privacyAccepted = prefs.getBoolean(KEY_PRIVACY, false),
         privacyAcceptedAt = prefs.getLong(KEY_PRIVACY_AT, 0L),
+        aliyunAccountType = runCatching {
+            AliyunAccountType.valueOf(prefs.getString(KEY_ALIYUN_ACCOUNT_TYPE, null) ?: "")
+        }.getOrDefault(AliyunAccountType.MAIN),
+        aliyunSiteType = runCatching {
+            AliyunSiteType.valueOf(prefs.getString(KEY_ALIYUN_SITE_TYPE, null) ?: "")
+        }.getOrDefault(AliyunSiteType.CHINA),
+        aliyunUsername = prefs.getString(KEY_ALIYUN_USERNAME, "") ?: "",
         languageTag = prefs.getString(KEY_LANGUAGE, "") ?: ""
     )
 
@@ -69,8 +86,13 @@ class SettingsRepository(context: Context) {
             .putLong(KEY_TEXT_MAX, next.textPreviewMaxBytes)
             .putBoolean(KEY_AUTO_PLAY, next.autoPlayMedia)
             .putBoolean(KEY_CONFIRM, next.confirmDestructiveOps)
+            .putBoolean(KEY_WEB_DIAGNOSTICS_REDACTION, next.webDiagnosticsRedactionEnabled)
+            .putString(KEY_WEB_BROWSER_ENGINE, next.webBrowserEngine.name)
             .putBoolean(KEY_PRIVACY, next.privacyAccepted)
             .putLong(KEY_PRIVACY_AT, next.privacyAcceptedAt)
+            .putString(KEY_ALIYUN_ACCOUNT_TYPE, next.aliyunAccountType.name)
+            .putString(KEY_ALIYUN_SITE_TYPE, next.aliyunSiteType.name)
+            .putString(KEY_ALIYUN_USERNAME, next.aliyunUsername)
             .putString(KEY_LANGUAGE, next.languageTag)
             .apply()
         _settings.value = next
@@ -91,8 +113,18 @@ class SettingsRepository(context: Context) {
         const val KEY_TEXT_MAX = "text_preview_max"
         const val KEY_AUTO_PLAY = "auto_play_media"
         const val KEY_CONFIRM = "confirm_destructive"
+        /** WebView 诊断普通标识脱敏开关；不存在时默认开启。 */
+        const val KEY_WEB_DIAGNOSTICS_REDACTION = "web_diagnostics_redaction"
+        /** 网页控制台浏览器引擎；旧版本不存在该键时默认使用系统 WebView。 */
+        const val KEY_WEB_BROWSER_ENGINE = "web_browser_engine"
         const val KEY_PRIVACY = "privacy_accepted"
         const val KEY_PRIVACY_AT = "privacy_accepted_at"
+        /** 仅保存网页控制台登录入口类型，不保存任何认证凭据。 */
+        const val KEY_ALIYUN_ACCOUNT_TYPE = "aliyun_account_type"
+        /** 保存网页控制台站点；旧版本不存在该键时由仓库回退为中国站。 */
+        const val KEY_ALIYUN_SITE_TYPE = "aliyun_site_type"
+        /** RAM 登录名或主账号提示名；密码和 MFA 不得写入此偏好文件。 */
+        const val KEY_ALIYUN_USERNAME = "aliyun_username"
         const val KEY_LANGUAGE = "language_tag"
 
         /** 在 Application.attachBaseContext 中直接读取语言偏好（此时 repository 还未实例化）。 */

@@ -29,6 +29,8 @@
 
 - Manage multiple OSS profiles (AK/SK + Endpoint): create / edit / delete / switch active.
 - Credentials stored in `EncryptedSharedPreferences` (AES‑256‑GCM, Android Keystore backed).
+- Optional embedded Alibaba Cloud web console: remembers the account type and username, keeps
+  WebView cookies, and delegates password autofill to the system without exposing it to the app.
 - Multi-endpoint `OSSClient` cache (per profile × endpoint) — cross-region buckets just work.
 - Privacy Policy consent gate on first launch; privacy & OSS notice surfaces inside Settings.
 - **Encrypted one-click export / import of OSS profiles** for device-to-device sharing.

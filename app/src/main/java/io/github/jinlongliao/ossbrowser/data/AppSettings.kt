@@ -30,6 +30,33 @@ enum class ThemePalette {
     SUMMER_SKY
 }
 
+/** 阿里云网页登录时用于选择登录入口的账号类型。 */
+enum class AliyunAccountType {
+    /** 阿里云主账号；登录页不附加用户名预填参数。 */
+    MAIN,
+
+    /** RAM 用户；登录页通过阿里云官方 `username` 参数预填完整登录名。 */
+    RAM
+}
+
+/** 阿里云网页控制台站点；站点决定登录页和 OSS 控制台使用的官方域名。 */
+enum class AliyunSiteType {
+    /** 中国站，使用 `aliyun.com` 域名；作为新安装和旧版本升级后的默认值。 */
+    CHINA,
+
+    /** 国际站，使用 `alibabacloud.com` 域名。 */
+    INTERNATIONAL
+}
+
+/** 阿里云网页控制台使用的内置浏览器引擎。 */
+enum class WebBrowserEngine {
+    /** 使用设备提供的 Android System WebView。 */
+    SYSTEM_WEBVIEW,
+
+    /** 使用随应用打包的 Mozilla GeckoView；不依赖设备 WebView 版本。 */
+    GECKOVIEW
+}
+
 /**
  * 用户偏好设置。非敏感数据，走普通 SharedPreferences。
  */
@@ -46,10 +73,20 @@ data class AppSettings(
     val autoPlayMedia: Boolean = true,
     /** 对删除 / 移动 / 重命名等破坏性操作是否要求二次确认。 */
     val confirmDestructiveOps: Boolean = true,
+    /** WebView 诊断是否隐藏 URL 路径和 Cookie 脱敏值；查询参数与完整凭证始终隐藏。 */
+    val webDiagnosticsRedactionEnabled: Boolean = true,
+    /** 网页控制台浏览器引擎；默认使用设备提供的系统 WebView。 */
+    val webBrowserEngine: WebBrowserEngine = WebBrowserEngine.SYSTEM_WEBVIEW,
     /** 用户是否已同意隐私协议。 */
     val privacyAccepted: Boolean = false,
     /** 同意时间戳（可选展示）。 */
     val privacyAcceptedAt: Long = 0L,
+    /** 阿里云网页控制台最近一次选择的账号类型；不参与 OSS SDK 鉴权。 */
+    val aliyunAccountType: AliyunAccountType = AliyunAccountType.MAIN,
+    /** 阿里云网页控制台站点；旧版本未保存此字段时默认进入中国站。 */
+    val aliyunSiteType: AliyunSiteType = AliyunSiteType.CHINA,
+    /** 阿里云网页控制台最近一次输入的账号名；密码和 MFA 永不写入应用设置。 */
+    val aliyunUsername: String = "",
     /**
      * 语言 BCP-47 标签。空串表示"跟随系统"。
      * 支持集合：`en`、`zh-CN`、`zh-TW`。其余语种回退到 `en`。

@@ -20,10 +20,55 @@
     <string name="common_create">创建</string>
     <string name="common_generate">生成</string>
     <string name="common_open_failed">无法打开链接</string>
+    <string name="common_more">更多</string>
+    <string name="common_clear">清除</string>
+    <string name="common_retry">重试</string>
 
     <string name="nav_files">文件</string>
     <string name="nav_profiles">密钥</string>
+    <string name="nav_aliyun_web">阿里云</string>
     <string name="nav_settings">设置</string>
+
+    <string name="aliyun_web_title">阿里云网页控制台</string>
+    <string name="aliyun_web_account">网页登录账号</string>
+    <string name="aliyun_web_site">站点</string>
+    <string name="aliyun_web_site_china">中国站（默认）</string>
+    <string name="aliyun_web_site_international">国际站</string>
+    <string name="aliyun_web_account_type">账号类型</string>
+    <string name="aliyun_web_account_main">阿里云主账号</string>
+    <string name="aliyun_web_account_ram">RAM 子账号</string>
+    <string name="aliyun_web_username">账号名</string>
+    <string name="aliyun_web_ram_username_hint">请输入完整 RAM 登录名，例如 user@company.onaliyun.com。</string>
+    <string name="aliyun_web_main_username_hint">仅供下次使用时提示；是否能够预填由阿里云登录页决定。</string>
+    <string name="aliyun_web_password_notice">密码由系统自动填充服务处理，本 App 不读取或保存密码及 MFA 验证码。</string>
+    <string name="aliyun_web_save_and_login">保存并登录</string>
+    <string name="aliyun_web_open_oss">打开 OSS 控制台</string>
+    <string name="aliyun_web_system_browser">使用系统浏览器打开</string>
+    <string name="aliyun_web_clear_session">退出并清除网页数据</string>
+    <string name="aliyun_web_clear_session_confirm">确定清除阿里云 Cookie、站点存储、历史记录和 WebView 缓存吗？已保存的账号名会保留，便于下次预填。</string>
+    <string name="aliyun_web_open_failed">没有可打开此页面的浏览器。</string>
+    <string name="aliyun_web_diagnostics">WebView 诊断</string>
+    <string name="aliyun_web_diagnostic_current_url">当前 URL：%1$s</string>
+    <string name="aliyun_web_diagnostic_webview_version">WebView 版本：%1$s</string>
+    <string name="aliyun_web_diagnostic_load_duration">最近加载：%1$s</string>
+    <string name="aliyun_web_diagnostic_duration_value">%1$d 毫秒</string>
+    <string name="aliyun_web_diagnostic_cookies">Cookie：%1$s</string>
+    <string name="aliyun_web_diagnostic_cookie_policy_value">允许=%1$s，第三方=%2$s</string>
+    <string name="aliyun_web_diagnostic_cookie_value_hidden">已隐藏</string>
+    <string name="aliyun_web_diagnostic_recent_events">最近事件：</string>
+    <string name="aliyun_web_diagnostic_no_events">暂无事件</string>
+    <string name="aliyun_web_diagnostic_none">无</string>
+    <string name="aliyun_web_diagnostic_copy">复制诊断信息</string>
+    <string name="aliyun_web_diagnostic_copied">已复制脱敏诊断信息</string>
+    <string name="aliyun_web_diagnostic_started">开始加载：%1$s</string>
+    <string name="aliyun_web_diagnostic_finished">加载完成：%1$d 毫秒</string>
+    <string name="aliyun_web_diagnostic_popup">弹窗跳转：%1$s</string>
+    <string name="aliyun_web_diagnostic_network_error">网络错误：%1$d</string>
+    <string name="aliyun_web_diagnostic_http_error">HTTP 错误：%1$d</string>
+    <string name="aliyun_web_diagnostic_tls_error">TLS 错误：%1$d</string>
+    <string name="aliyun_web_diagnostic_renderer_gone">渲染进程结束；是否崩溃=%1$s</string>
+    <string name="aliyun_web_renderer_unavailable">WebView 渲染进程不可用</string>
+    <string name="aliyun_web_renderer_unavailable_desc">渲染进程连续崩溃，请重试或使用系统浏览器继续访问。</string>
 
     <string name="profiles_title">OSS 密钥管理</string>
     <string name="profiles_add">新增配置</string>
@@ -205,12 +250,17 @@
     <string name="settings_language_zh_tw">繁體中文</string>
 
     <string name="settings_page_size">每页加载数量</string>
+    <string name="settings_web_browser_engine">网页浏览内核</string>
+    <string name="settings_web_browser_engine_system">系统 WebView</string>
+    <string name="settings_web_browser_engine_gecko">GeckoView（推荐）</string>
     <string name="settings_page_size_value">%1$d 条 / 页</string>
     <string name="settings_text_preview_max">文本预览大小上限</string>
     <string name="settings_auto_play">自动播放音视频</string>
     <string name="settings_auto_play_desc">进入预览后自动开始播放</string>
     <string name="settings_confirm_destructive">破坏性操作二次确认</string>
     <string name="settings_confirm_destructive_desc">删除 / 移动 / 重命名前需再次确认</string>
+    <string name="settings_web_diagnostics_redaction">WebView 诊断脱敏</string>
+    <string name="settings_web_diagnostics_redaction_desc">隐藏 URL 路径和 Cookie 值；关闭后仅显示 Cookie 首尾字符，完整值及查询参数始终隐藏。</string>
 
     <string name="settings_clear_cache">清除预览缓存</string>
     <string name="settings_clear_cache_desc">清空预览产生的临时文件</string>
