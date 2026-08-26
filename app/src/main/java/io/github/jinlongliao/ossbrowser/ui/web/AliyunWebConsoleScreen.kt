@@ -258,7 +258,7 @@ fun AliyunWebConsoleScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showClearSessionDialog = false
-                    clearWebSession(webView) {
+                    clearWebSession(context, webView) {
                         webView?.loadUrl(
                             buildAliyunSignInUrl(
                                 settings.aliyunSiteType,
@@ -342,6 +342,7 @@ private fun AliyunConsoleWebView(
                     settings.safeBrowsingEnabled = true
                 }
                 val cookieManager = CookieManager.getInstance()
+                val sessionStore = SystemWebViewSessionStore(viewContext)
                 cookieManager.setAcceptCookie(true)
                 cookieManager.setAcceptThirdPartyCookies(this, false)
                 webChromeClient = object : WebChromeClient() {
@@ -412,6 +413,7 @@ private fun AliyunConsoleWebView(
                     }
 
                     override fun onPageFinished(view: WebView, url: String) {
+                        sessionStore.persist(url, cookieManager.getCookie(url))
                         val duration = (SystemClock.elapsedRealtime() - loadStartedAtMillis)
                             .coerceAtLeast(0L)
                         val safeUrl = redactWebDiagnosticUrl(url)
@@ -493,8 +495,9 @@ private fun AliyunConsoleWebView(
                     }
                 }
                 setDownloadListener { url, _, _, _, _ -> openExternalUrl(context, url) }
-                loadUrl(initialUrl)
                 onWebViewReady(this)
+                // 会话 Cookie 的写入是异步的；等待全部恢复后再发出首个控制台请求。
+                sessionStore.restore(cookieManager) { loadUrl(initialUrl) }
             }
         },
         onRelease = { releasedWebView ->
@@ -810,8 +813,15 @@ private fun SelectionOption(
     }
 }
 
-/** 清除 WebView Cookie、站点存储、历史和缓存；账号名设置保持不变，便于再次预填。 */
-private fun clearWebSession(webView: WebView?, onCleared: () -> Unit) {
+/**
+ * 清除 WebView Cookie、加密会话快照、站点存储、历史和缓存。
+ *
+ * @param context 用于访问当前应用的加密会话存储。
+ * @param webView 当前系统 WebView；尚未创建时允许为空。
+ * @param onCleared 清除完成后的主线程回调。
+ */
+private fun clearWebSession(context: Context, webView: WebView?, onCleared: () -> Unit) {
+    SystemWebViewSessionStore(context).clear()
     CookieManager.getInstance().removeAllCookies {
         CookieManager.getInstance().flush()
         WebStorage.getInstance().deleteAllData()

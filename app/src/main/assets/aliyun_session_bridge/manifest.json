@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Aliyun Session Bridge",
+  "version": "1.0.0",
+  "description": "Persists Alibaba Cloud session cookies in the embedding app's encrypted storage.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "aliyun-session-bridge@ossbrowser.local"
+    }
+  },
+  "permissions": [
+    "cookies",
+    "nativeMessaging",
+    "geckoViewAddons",
+    "https://aliyun.com/*",
+    "https://*.aliyun.com/*",
+    "https://alibabacloud.com/*",
+    "https://*.alibabacloud.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  }
+}

@@ -94,6 +94,7 @@ fun GeckoAliyunWebConsoleScreen(
     DisposableEffect(session) {
         session.setActive(true)
         onDispose {
+            GeckoRuntimeProvider.requestCookieSnapshot()
             session.setFocused(false)
             session.setActive(false)
         }
@@ -123,6 +124,12 @@ fun GeckoAliyunWebConsoleScreen(
             ): GeckoResult<AllowOrDeny>? {
                 val target = request.uri
                 if (target == "about:blank" || isTrustedAliyunWebUrl(target)) {
+                    // 本应用只展示一个 GeckoView。将 target=_blank/window.open 的受信页面
+                    // 改在当前 Session 打开，否则 Gecko 默认请求不可见的新 Session，点击表现为无反应。
+                    if (request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+                        session.loadUri(target)
+                        return GeckoResult.fromValue(AllowOrDeny.DENY)
+                    }
                     return GeckoResult.fromValue(AllowOrDeny.ALLOW)
                 }
                 if (target.startsWith("https://", ignoreCase = true)) {
@@ -148,6 +155,14 @@ fun GeckoAliyunWebConsoleScreen(
                 diagnostics = diagnostics
                     .copy(lastLoadDurationMillis = duration)
                     .appendEvent("Finished: success=$success, ${duration}ms")
+                GeckoRuntimeProvider.requestCookieSnapshot()
+            }
+
+            override fun onSessionStateChange(
+                session: GeckoSession,
+                sessionState: GeckoSession.SessionState
+            ) {
+                GeckoRuntimeProvider.persistAliyunSessionState(sessionState)
             }
         }
     }
@@ -246,6 +261,7 @@ fun GeckoAliyunWebConsoleScreen(
             confirmButton = {
                 TextButton(onClick = {
                     runtime.storageController.clearData(StorageController.ClearFlags.SITE_DATA)
+                    GeckoRuntimeProvider.clearAliyunSessionState()
                     showClearSessionDialog = false
                     session.loadUri(
                         buildAliyunSignInUrl(
