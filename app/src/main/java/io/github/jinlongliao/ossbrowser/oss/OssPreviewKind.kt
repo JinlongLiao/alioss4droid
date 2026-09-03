@@ -26,6 +26,12 @@ enum class OssPreviewKind {
     PDF,
     /** Word 文档（.docx），应用内解析 XML 抽取纯文本预览。 */
     DOCX,
+    /** Excel 工作簿（.xlsx），应用内解析工作表与缓存单元格值。 */
+    XLSX,
+    /** PowerPoint 演示文稿（.pptx），应用内按页提取文字内容。 */
+    PPTX,
+    /** CSV/TSV 分隔文本，应用内解析为可横向滚动的轻量表格。 */
+    DELIMITED_TEXT,
     UNSUPPORTED;
 }
 
@@ -45,7 +51,6 @@ fun OssObjectItem.File.isMarkdownFile(): Boolean {
 private val TEXT_EXTS: Set<String> = setOf(
     "txt", "log", "md", "markdown", "mdown", "mkd", "mkdn", "rst", "tex", "adoc",
     "json", "xml", "yaml", "yml", "toml", "ini", "conf", "cfg", "properties", "env", "plist",
-    "csv", "tsv",
     "css", "scss", "sass", "less",
     "js", "ts", "jsx", "tsx", "mjs", "cjs", "vue", "svelte",
     "kt", "kts", "java", "gradle", "groovy", "scala", "clj", "cljs",
@@ -73,6 +78,15 @@ private val PDF_EXTS: Set<String> = setOf("pdf")
 
 private val DOCX_EXTS: Set<String> = setOf("docx")
 
+/** 支持本地轻量预览的新格式 Excel 扩展名。 */
+private val XLSX_EXTS: Set<String> = setOf("xlsx")
+
+/** 支持本地轻量预览的新格式 PowerPoint 扩展名。 */
+private val PPTX_EXTS: Set<String> = setOf("pptx")
+
+/** 支持本地轻量表格预览的分隔文本扩展名。 */
+private val DELIMITED_TEXT_EXTS: Set<String> = setOf("csv", "tsv")
+
 fun OssObjectItem.File.previewKind(): OssPreviewKind {
     val name = displayName.lowercase()
     val ext = name.substringAfterLast('.', "")
@@ -87,6 +101,9 @@ fun OssObjectItem.File.previewKind(): OssPreviewKind {
     return when (ext) {
         in PDF_EXTS -> OssPreviewKind.PDF
         in DOCX_EXTS -> OssPreviewKind.DOCX
+        in XLSX_EXTS -> OssPreviewKind.XLSX
+        in PPTX_EXTS -> OssPreviewKind.PPTX
+        in DELIMITED_TEXT_EXTS -> OssPreviewKind.DELIMITED_TEXT
         in HTML_EXTS -> OssPreviewKind.HTML
         in TEXT_EXTS -> OssPreviewKind.TEXT
         in IMAGE_EXTS -> OssPreviewKind.IMAGE

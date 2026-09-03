@@ -116,13 +116,15 @@
 
 ```bash
 # macOS / Linux
-./gradlew :app:assembleDebug
+./gradlew :app:assembleLiteDebug
 
 # Windows
-gradlew.bat :app:assembleDebug
+gradlew.bat :app:assembleLiteDebug
 ```
 
-The APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
+The APK lands at `app/build/outputs/apk/lite/debug/app-lite-debug.apk`. The Lite variant is the
+default recommendation and does not package GeckoView; use `assembleGeckoDebug` only when the
+bundled browser engine is required.
 
 ### Option C · One-shot script (recommended for Xiaomi HyperOS)
 

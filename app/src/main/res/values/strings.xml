@@ -110,6 +110,12 @@
     <string name="browser_bucket_subtitle">bucket: %1$s</string>
     <string name="browser_go_configure">Go to configure</string>
     <string name="browser_jump_path">Jump to path</string>
+    <string name="browser_sort">Sort files</string>
+    <string name="browser_sort_name_ascending">Name: A to Z</string>
+    <string name="browser_sort_name_descending">Name: Z to A</string>
+    <string name="browser_sort_time_ascending">Modified time: oldest first</string>
+    <string name="browser_sort_time_descending">Modified time: newest first</string>
+    <string name="browser_more_actions">More actions</string>
     <string name="browser_mkdir">New folder</string>
     <string name="browser_mkdir_name_label">Folder name</string>
     <string name="browser_upload">Upload</string>
@@ -208,6 +214,11 @@
     <string name="preview_html_enable_full">Enable for this preview</string>
     <string name="preview_docx_failed">Failed to parse DOCX (unsupported or corrupt file).</string>
     <string name="preview_docx_empty">This document is empty.</string>
+    <string name="preview_xlsx_failed">Failed to parse XLSX (unsupported, encrypted, or corrupt file).</string>
+    <string name="preview_xlsx_empty">This workbook has no displayable cells.</string>
+    <string name="preview_pptx_failed">Failed to parse PPTX (unsupported, encrypted, or corrupt file).</string>
+    <string name="preview_pptx_slide">Slide %1$d</string>
+    <string name="preview_pptx_empty_slide">No displayable text on this slide.</string>
     <string name="preview_loading_title">Loading preview…</string>
     <string name="preview_loading_download">Downloaded %1$s / %2$s</string>
     <string name="preview_loading_fetching">Fetching data, please wait…</string>

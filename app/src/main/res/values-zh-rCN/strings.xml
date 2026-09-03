@@ -104,6 +104,12 @@
     <string name="browser_bucket_subtitle">bucket: %1$s</string>
     <string name="browser_go_configure">去配置</string>
     <string name="browser_jump_path">跳转到路径</string>
+    <string name="browser_sort">文件排序</string>
+    <string name="browser_sort_name_ascending">名称：正序</string>
+    <string name="browser_sort_name_descending">名称：倒序</string>
+    <string name="browser_sort_time_ascending">修改时间：从旧到新</string>
+    <string name="browser_sort_time_descending">修改时间：从新到旧</string>
+    <string name="browser_more_actions">更多操作</string>
     <string name="browser_mkdir">新建目录</string>
     <string name="browser_mkdir_name_label">目录名</string>
     <string name="browser_upload">上传</string>
@@ -196,6 +202,11 @@
     <string name="preview_html_enable_full">仅本次预览开启</string>
     <string name="preview_docx_failed">DOCX 解析失败（不支持的格式或文件损坏）。</string>
     <string name="preview_docx_empty">该文档内容为空。</string>
+    <string name="preview_xlsx_failed">XLSX 解析失败（不支持、已加密或文件损坏）。</string>
+    <string name="preview_xlsx_empty">该工作簿没有可展示的单元格。</string>
+    <string name="preview_pptx_failed">PPTX 解析失败（不支持、已加密或文件损坏）。</string>
+    <string name="preview_pptx_slide">第 %1$d 页</string>
+    <string name="preview_pptx_empty_slide">该页没有可展示的文字。</string>
     <string name="preview_loading_title">正在加载预览…</string>
     <string name="preview_loading_download">已下载 %1$s / %2$s</string>
     <string name="preview_loading_fetching">正在拉取数据，请稍候…</string>

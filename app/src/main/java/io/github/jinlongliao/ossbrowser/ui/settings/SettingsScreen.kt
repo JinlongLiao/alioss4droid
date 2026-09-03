@@ -80,6 +80,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -112,6 +113,10 @@ fun SettingsScreen(
 ) {
     val settings by vm.state.collectAsState()
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = remember(context, configuration) {
+        context.createConfigurationContext(configuration).resources
+    }
     val profileVm: ProfileViewModel = viewModel(factory = ProfileViewModel.Factory)
 
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -145,13 +150,13 @@ fun SettingsScreen(
         }.onSuccess { count ->
             Toast.makeText(
                 context,
-                context.getString(R.string.export_success, count),
+                resources.getString(R.string.export_success, count),
                 Toast.LENGTH_SHORT
             ).show()
         }.onFailure { e ->
             Toast.makeText(
                 context,
-                context.getString(R.string.export_failed, e.localizedMessage ?: e.toString()),
+                resources.getString(R.string.export_failed, e.localizedMessage ?: e.toString()),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -169,7 +174,7 @@ fun SettingsScreen(
         if (bytes == null) {
             Toast.makeText(
                 context,
-                context.getString(R.string.import_failed, "cannot read file"),
+                resources.getString(R.string.import_failed, "cannot read file"),
                 Toast.LENGTH_LONG
             ).show()
             return@rememberLauncherForActivityResult
@@ -180,16 +185,16 @@ fun SettingsScreen(
         }.onSuccess { (added, updated) ->
             Toast.makeText(
                 context,
-                context.getString(R.string.import_success, added, updated),
+                resources.getString(R.string.import_success, added, updated),
                 Toast.LENGTH_LONG
             ).show()
         }.onFailure { e ->
             val msg = when (e) {
                 is ProfileBackupCodec.WrongPasswordException ->
-                    context.getString(R.string.import_wrong_password)
+                    resources.getString(R.string.import_wrong_password)
                 is ProfileBackupCodec.BadFormatException ->
-                    context.getString(R.string.import_bad_format)
-                else -> context.getString(R.string.import_failed, e.localizedMessage ?: e.toString())
+                    resources.getString(R.string.import_bad_format)
+                else -> resources.getString(R.string.import_failed, e.localizedMessage ?: e.toString())
             }
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
@@ -449,7 +454,8 @@ fun SettingsScreen(
                 FileUtils.humanSize(512L * 1024) to 512L * 1024,
                 FileUtils.humanSize(2L * 1024 * 1024) to 2L * 1024 * 1024,
                 FileUtils.humanSize(5L * 1024 * 1024) to 5L * 1024 * 1024,
-                FileUtils.humanSize(10L * 1024 * 1024) to 10L * 1024 * 1024
+                FileUtils.humanSize(10L * 1024 * 1024) to 10L * 1024 * 1024,
+                FileUtils.humanSize(30L * 1024 * 1024) to 30L * 1024 * 1024
             ),
             selected = settings.textPreviewMaxBytes,
             onSelect = { vm.setTextPreviewMax(it); showTextMaxDialog = false },
@@ -466,13 +472,13 @@ fun SettingsScreen(
                 if (profiles.isEmpty()) {
                     Toast.makeText(
                         context,
-                        context.getString(R.string.export_nothing),
+                        resources.getString(R.string.export_nothing),
                         Toast.LENGTH_SHORT
                     ).show()
                     return@ExportDialog
                 }
                 pendingExportPassword = password
-                val defaultName = context.getString(
+                val defaultName = resources.getString(
                     R.string.export_default_name,
                     SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
                 )
@@ -508,7 +514,7 @@ fun SettingsScreen(
                     val cleared = clearAppCache(context)
                     Toast.makeText(
                         context,
-                        context.getString(R.string.settings_clear_cache_result, FileUtils.humanSize(cleared)),
+                        resources.getString(R.string.settings_clear_cache_result, FileUtils.humanSize(cleared)),
                         Toast.LENGTH_SHORT
                     ).show()
                     showClearCacheConfirm = false

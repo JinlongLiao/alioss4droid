@@ -16,13 +16,13 @@
 
 ```bash
 # Windows
-gradlew.bat :app:assembleDebug
+gradlew.bat :app:assembleLiteDebug
 
 # macOS / Linux
-./gradlew :app:assembleDebug
+./gradlew :app:assembleLiteDebug
 ```
 
-产物：`app/build/outputs/apk/debug/app-debug.apk`。
+产物：`app/build/outputs/apk/lite/debug/app-lite-debug.apk`，不包含 GeckoView 内核。
 
 ### 1.3 小米 / 红米等 MIUI / HyperOS 设备
 

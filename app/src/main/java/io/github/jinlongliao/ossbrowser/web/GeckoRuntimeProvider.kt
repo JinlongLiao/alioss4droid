@@ -6,6 +6,8 @@ package io.github.jinlongliao.ossbrowser.web
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.github.jinlongliao.ossbrowser.BuildConfig
@@ -145,32 +147,39 @@ object GeckoRuntimeProvider {
         runtime.webExtensionController
             .ensureBuiltIn(SESSION_BRIDGE_LOCATION, SESSION_BRIDGE_EXTENSION_ID)
             .accept { extension ->
-                if (extension == null) return@accept
-                extension.setMessageDelegate(
-                    object : WebExtension.MessageDelegate {
-                        override fun onConnect(port: WebExtension.Port) {
-                            if (port.name != SESSION_BRIDGE_NATIVE_APP_ID ||
-                                port.sender.environmentType !=
-                                WebExtension.MessageSender.ENV_TYPE_EXTENSION
-                            ) {
-                                port.disconnect()
-                                return
-                            }
-                            sessionBridgePort = port
-                            port.setDelegate(object : WebExtension.PortDelegate {
-                                override fun onPortMessage(message: Any, port: WebExtension.Port) {
-                                    handleSessionBridgeMessage(message)
+                if (extension == null) {
+                    return@accept
+                }
+                // GeckoResult 未声明回调线程；显式切到主线程以满足 GeckoView 消息代理契约。
+                Handler(Looper.getMainLooper()).post {
+                    extension.setMessageDelegate(
+                        object : WebExtension.MessageDelegate {
+                            override fun onConnect(port: WebExtension.Port) {
+                                if (port.name != SESSION_BRIDGE_NATIVE_APP_ID ||
+                                    port.sender.environmentType !=
+                                    WebExtension.MessageSender.ENV_TYPE_EXTENSION
+                                ) {
+                                    port.disconnect()
+                                    return
                                 }
+                                sessionBridgePort = port
+                                port.setDelegate(object : WebExtension.PortDelegate {
+                                    override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                                        handleSessionBridgeMessage(message)
+                                    }
 
-                                override fun onDisconnect(port: WebExtension.Port) {
-                                    if (sessionBridgePort === port) sessionBridgePort = null
-                                }
-                            })
-                            restorePersistedCookies(port)
-                        }
-                    },
-                    SESSION_BRIDGE_NATIVE_APP_ID
-                )
+                                    override fun onDisconnect(port: WebExtension.Port) {
+                                        if (sessionBridgePort === port) {
+                                            sessionBridgePort = null
+                                        }
+                                    }
+                                })
+                                restorePersistedCookies(port)
+                            }
+                        },
+                        SESSION_BRIDGE_NATIVE_APP_ID
+                    )
+                }
             }
     }
 

@@ -57,6 +57,24 @@ enum class WebBrowserEngine {
     GECKOVIEW
 }
 
+/** OSS 对象列表中的文件排序字段。 */
+enum class OssObjectSortField {
+    /** 按文件名称排序，不区分字母大小写。 */
+    NAME,
+
+    /** 按 OSS 返回的最后修改时间排序。 */
+    MODIFIED_TIME
+}
+
+/** OSS 对象列表排序方向。 */
+enum class OssObjectSortDirection {
+    /** 正序；名称从 A 到 Z，修改时间从旧到新。 */
+    ASCENDING,
+
+    /** 倒序；名称从 Z 到 A，修改时间从新到旧。 */
+    DESCENDING
+}
+
 /**
  * 用户偏好设置。非敏感数据，走普通 SharedPreferences。
  */
@@ -67,6 +85,10 @@ data class AppSettings(
     val themePalette: ThemePalette = ThemePalette.DEFAULT,
     /** 每页拉取对象数（OSS ListObjects maxKeys）。 */
     val pageSize: Int = 10,
+    /** OSS 文件排序字段；目录始终置顶。 */
+    val ossObjectSortField: OssObjectSortField = OssObjectSortField.NAME,
+    /** OSS 文件排序方向；目录之间使用相同方向按名称排序。 */
+    val ossObjectSortDirection: OssObjectSortDirection = OssObjectSortDirection.ASCENDING,
     /** 文本预览的最大字节数（超过则提示）。 */
     val textPreviewMaxBytes: Long = 2L * 1024 * 1024,
     /** 进入音视频预览时是否自动播放。 */

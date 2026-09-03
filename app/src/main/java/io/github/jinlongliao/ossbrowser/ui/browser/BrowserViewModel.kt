@@ -25,6 +25,8 @@ import io.github.jinlongliao.ossbrowser.OssBrowserApp
 import io.github.jinlongliao.ossbrowser.R
 import io.github.jinlongliao.ossbrowser.data.OssProfile
 import io.github.jinlongliao.ossbrowser.data.OssProfileRepository
+import io.github.jinlongliao.ossbrowser.data.OssObjectSortDirection
+import io.github.jinlongliao.ossbrowser.data.OssObjectSortField
 import io.github.jinlongliao.ossbrowser.data.SettingsRepository
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
@@ -34,7 +36,12 @@ import io.github.jinlongliao.ossbrowser.oss.OssPreviewKind
 import io.github.jinlongliao.ossbrowser.oss.OssService
 import io.github.jinlongliao.ossbrowser.oss.isMarkdownFile
 import io.github.jinlongliao.ossbrowser.oss.previewKind
+import io.github.jinlongliao.ossbrowser.oss.sortOssObjectItems
 import io.github.jinlongliao.ossbrowser.util.DocxText
+import io.github.jinlongliao.ossbrowser.util.DelimitedTextPreviewParser
+import io.github.jinlongliao.ossbrowser.util.OoxmlPreviewParser
+import io.github.jinlongliao.ossbrowser.util.PresentationSlidePreview
+import io.github.jinlongliao.ossbrowser.util.SpreadsheetSheetPreview
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,6 +59,12 @@ class BrowserViewModel(
 
     private val pageSize: Int get() = settingsRepo.settings.value.pageSize
     private val textPreviewMax: Long get() = settingsRepo.settings.value.textPreviewMaxBytes
+
+    /** 使用已持久化偏好排序对象，目录始终位于文件之前。 */
+    private fun sortObjects(items: List<OssObjectItem>): List<OssObjectItem> {
+        val settings = settingsRepo.settings.value
+        return sortOssObjectItems(items, settings.ossObjectSortField, settings.ossObjectSortDirection)
+    }
 
     /** 从全局 Application 上下文读取当前 Locale 下的资源字符串。 */
     private fun str(resId: Int, vararg args: Any?): String =
@@ -160,7 +173,7 @@ class BrowserViewModel(
                     _state.value = _state.value.copy(
                         loading = false,
                         errorMessage = null,
-                        items = cached.items,
+                        items = sortObjects(cached.items),
                         nextMarker = cached.nextMarker,
                         loadingMore = false
                     )
@@ -197,7 +210,7 @@ class BrowserViewModel(
                     listCache.writeList(profile.id, bucket, prefix, page.items, page.nextMarker)
                     _state.value = _state.value.copy(
                         loading = false,
-                        items = page.items,
+                        items = sortObjects(page.items),
                         nextMarker = page.nextMarker
                     )
                 }
@@ -239,8 +252,7 @@ class BrowserViewModel(
                 if (mySeq != loadMoreSeq || parentSeq != refreshSeq) return@launch
 
                 val existing = _state.value.items.map { it.key }.toHashSet()
-                val merged = (_state.value.items + page.items.filter { it.key !in existing })
-                    .sortedWith(OssService.FolderFirstByName)
+                val merged = sortObjects(_state.value.items + page.items.filter { it.key !in existing })
                 _state.value = _state.value.copy(
                     items = merged,
                     nextMarker = page.nextMarker,
@@ -258,6 +270,21 @@ class BrowserViewModel(
                 )
             }
         }
+    }
+
+    /**
+     * 更新并持久化 OSS 文件排序偏好，然后立即重排当前目录中已加载的对象。
+     *
+     * 排序只改变本地展示顺序，不重新请求 OSS，也不修改缓存中的对象内容。
+     *
+     * @param field 文件排序字段。
+     * @param direction 排序方向。
+     */
+    fun updateObjectSort(field: OssObjectSortField, direction: OssObjectSortDirection) {
+        settingsRepo.update {
+            it.copy(ossObjectSortField = field, ossObjectSortDirection = direction)
+        }
+        _state.value = _state.value.copy(items = sortObjects(_state.value.items))
     }
 
     fun selectBucket(name: String, endpoint: String? = null) {
@@ -465,7 +492,7 @@ class BrowserViewModel(
 
     /**
      * 打开文件预览：
-     * - TEXT / DOCX：下载到内存（大小上限由用户设置）→ 字符串 / 段落
+     * - TEXT / DOCX / XLSX / PPTX：受大小上限约束地下载到内存并本地解析
      * - IMAGE：生成 1 小时预签名 URL，由 UI 通过 Coil 加载
      * - AUDIO / VIDEO：生成 1 小时预签名 URL，内嵌 ExoPlayer 播放
      * - PDF：下载到 cacheDir，UI 用 PdfRenderer 渲染（带实时进度）
@@ -485,9 +512,10 @@ class BrowserViewModel(
             )
             return
         }
-        // 前置检查：TEXT / HTML / DOCX 走内存下载，若预计大小已超阈值就不尝试真正下载。
+        // 前置检查：文本、HTML 与 OOXML 走内存下载，若预计大小已超阈值就不尝试真正下载。
         if ((kind == OssPreviewKind.TEXT || kind == OssPreviewKind.HTML ||
-                kind == OssPreviewKind.DOCX) &&
+                kind == OssPreviewKind.DOCX || kind == OssPreviewKind.XLSX ||
+                kind == OssPreviewKind.PPTX || kind == OssPreviewKind.DELIMITED_TEXT) &&
             item.size > 0 && item.size > textPreviewMax
         ) {
             _state.value = _state.value.copy(
@@ -556,6 +584,46 @@ class BrowserViewModel(
                             paragraphs = paragraphs
                         )
                     }
+                    OssPreviewKind.XLSX -> {
+                        val bytes = service.downloadBytes(
+                            bucket = bucket,
+                            key = item.key,
+                            maxBytes = textPreviewMax,
+                            endpoint = endpoint
+                        )
+                        val sheets = OoxmlPreviewParser.parseSpreadsheet(bytes)
+                            ?: throw IllegalStateException(str(R.string.preview_xlsx_failed))
+                        PreviewState.Spreadsheet(item.key, item.displayName, sheets)
+                    }
+                    OssPreviewKind.PPTX -> {
+                        val bytes = service.downloadBytes(
+                            bucket = bucket,
+                            key = item.key,
+                            maxBytes = textPreviewMax,
+                            endpoint = endpoint
+                        )
+                        val slides = OoxmlPreviewParser.parsePresentation(bytes)
+                            ?: throw IllegalStateException(str(R.string.preview_pptx_failed))
+                        PreviewState.Presentation(item.key, item.displayName, slides)
+                    }
+                    OssPreviewKind.DELIMITED_TEXT -> {
+                        val bytes = service.downloadBytes(
+                            bucket = bucket,
+                            key = item.key,
+                            maxBytes = textPreviewMax,
+                            endpoint = endpoint
+                        )
+                        val delimiter = if (item.displayName.endsWith(".tsv", ignoreCase = true)) '\t' else ','
+                        val rows = DelimitedTextPreviewParser.parseDelimitedText(
+                            bytes.toString(Charsets.UTF_8),
+                            delimiter
+                        )
+                        PreviewState.Spreadsheet(
+                            item.key,
+                            item.displayName,
+                            listOf(SpreadsheetSheetPreview(item.displayName, rows))
+                        )
+                    }
                     OssPreviewKind.IMAGE,
                     OssPreviewKind.AUDIO,
                     OssPreviewKind.VIDEO -> {
@@ -612,6 +680,13 @@ class BrowserViewModel(
                 if (st != null) _state.value = _state.value.copy(previewState = st)
             }.onFailure { e ->
                 if (e is CancellationException) throw e
+                Log.e(
+                    TAG,
+                    "Preview failed: stage=local-preview, bucket=$bucket, key=${item.key}, " +
+                        "kind=$kind, objectSize=${item.size}, errorType=${e.javaClass.name}, " +
+                        "message=${e.message}",
+                    e
+                )
                 _state.value = _state.value.copy(
                     previewState = PreviewState.Error(
                         key = item.key,
@@ -930,6 +1005,20 @@ sealed class PreviewState {
         override val key: String,
         override val name: String,
         val paragraphs: List<String>
+    ) : PreviewState()
+
+    /** XLSX 预览：按工作表保存有限行列的单元格展示值。 */
+    data class Spreadsheet(
+        override val key: String,
+        override val name: String,
+        val sheets: List<SpreadsheetSheetPreview>
+    ) : PreviewState()
+
+    /** PPTX 预览：按幻灯片保存本地提取的文字内容。 */
+    data class Presentation(
+        override val key: String,
+        override val name: String,
+        val slides: List<PresentationSlidePreview>
     ) : PreviewState()
 
     /**

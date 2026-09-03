@@ -30,11 +30,11 @@ for arg in "$@"; do
   esac
 done
 
-APK="app/build/outputs/apk/debug/app-debug.apk"
+APK="app/build/outputs/apk/lite/debug/app-lite-debug.apk"
 # Debug build appends `.debug` via applicationIdSuffix; keep in sync with app/build.gradle.kts.
 PKG="io.github.jinlongliao.ossbrowser.debug"
 ACT="io.github.jinlongliao.ossbrowser.MainActivity"
-REMOTE="/data/local/tmp/oss-browser-debug.apk"
+REMOTE="/data/local/tmp/oss-browser-lite-debug.apk"
 
 step() { printf "\n==> %s\n" "$*"; }
 
@@ -42,7 +42,7 @@ step() { printf "\n==> %s\n" "$*"; }
 if [[ $NO_BUILD -eq 0 ]]; then
   tasks=()
   [[ $CLEAN -eq 1 ]] && tasks+=("clean")
-  tasks+=("assembleDebug")
+  tasks+=("assembleLiteDebug")
   step "Gradle ${tasks[*]}"
   ./gradlew "${tasks[@]}" --console=plain
 fi

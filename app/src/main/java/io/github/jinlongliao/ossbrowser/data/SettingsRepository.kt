@@ -48,6 +48,12 @@ class SettingsRepository(context: Context) {
             ThemePalette.valueOf(prefs.getString(KEY_THEME_PALETTE, null) ?: "")
         }.getOrDefault(ThemePalette.DEFAULT),
         pageSize = prefs.getInt(KEY_PAGE_SIZE, 10),
+        ossObjectSortField = runCatching {
+            OssObjectSortField.valueOf(prefs.getString(KEY_OSS_OBJECT_SORT_FIELD, null) ?: "")
+        }.getOrDefault(OssObjectSortField.NAME),
+        ossObjectSortDirection = runCatching {
+            OssObjectSortDirection.valueOf(prefs.getString(KEY_OSS_OBJECT_SORT_DIRECTION, null) ?: "")
+        }.getOrDefault(OssObjectSortDirection.ASCENDING),
         textPreviewMaxBytes = prefs.getLong(KEY_TEXT_MAX, 2L * 1024 * 1024),
         autoPlayMedia = prefs.getBoolean(KEY_AUTO_PLAY, true),
         confirmDestructiveOps = prefs.getBoolean(KEY_CONFIRM, true),
@@ -83,6 +89,8 @@ class SettingsRepository(context: Context) {
             .putString(KEY_THEME, next.themeMode.name)
             .putString(KEY_THEME_PALETTE, next.themePalette.name)
             .putInt(KEY_PAGE_SIZE, next.pageSize)
+            .putString(KEY_OSS_OBJECT_SORT_FIELD, next.ossObjectSortField.name)
+            .putString(KEY_OSS_OBJECT_SORT_DIRECTION, next.ossObjectSortDirection.name)
             .putLong(KEY_TEXT_MAX, next.textPreviewMaxBytes)
             .putBoolean(KEY_AUTO_PLAY, next.autoPlayMedia)
             .putBoolean(KEY_CONFIRM, next.confirmDestructiveOps)
@@ -110,6 +118,10 @@ class SettingsRepository(context: Context) {
         /** 独立于明暗模式的配色主题持久化键。 */
         const val KEY_THEME_PALETTE = "theme_palette"
         const val KEY_PAGE_SIZE = "page_size"
+        /** OSS 文件排序字段持久化键；旧版本不存在时默认按名称排序。 */
+        const val KEY_OSS_OBJECT_SORT_FIELD = "oss_object_sort_field"
+        /** OSS 文件排序方向持久化键；旧版本不存在时默认正序。 */
+        const val KEY_OSS_OBJECT_SORT_DIRECTION = "oss_object_sort_direction"
         const val KEY_TEXT_MAX = "text_preview_max"
         const val KEY_AUTO_PLAY = "auto_play_media"
         const val KEY_CONFIRM = "confirm_destructive"

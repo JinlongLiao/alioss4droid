@@ -78,6 +78,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -104,6 +105,10 @@ fun AliyunWebConsoleScreen(
     onSaveAccount: (AliyunSiteType, AliyunAccountType, String) -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = remember(context, configuration) {
+        context.createConfigurationContext(configuration).resources
+    }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var currentUrl by remember { mutableStateOf(aliyunOssConsoleUrl(settings.aliyunSiteType)) }
     var loading by remember { mutableStateOf(true) }
@@ -214,7 +219,7 @@ fun AliyunWebConsoleScreen(
                         onRendererGone = { didCrash ->
                             rendererRecoveryCount += 1
                             diagnostics = diagnostics.appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_renderer_gone,
                                     didCrash.toString()
                                 )
@@ -307,6 +312,10 @@ private fun AliyunConsoleWebView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = remember(context, configuration) {
+        context.createConfigurationContext(configuration).resources
+    }
     AndroidView(
         modifier = modifier,
         factory = { viewContext ->
@@ -359,7 +368,7 @@ private fun AliyunConsoleWebView(
                             onPopupTarget = { target ->
                                 publishDiagnostics { snapshot ->
                                     snapshot.appendEvent(
-                                        context.getString(
+                                        resources.getString(
                                             R.string.aliyun_web_diagnostic_popup,
                                             displayWebDiagnosticUrl(
                                                 redactWebDiagnosticUrl(target),
@@ -403,7 +412,7 @@ private fun AliyunConsoleWebView(
                                 thirdPartyCookiesAccepted =
                                     cookieManager.acceptThirdPartyCookies(view)
                             ).appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_started,
                                     displayWebDiagnosticUrl(safeUrl, redactionEnabled = true)
                                 )
@@ -426,7 +435,7 @@ private fun AliyunConsoleWebView(
                                 thirdPartyCookiesAccepted =
                                     cookieManager.acceptThirdPartyCookies(view)
                             ).appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_finished,
                                     duration
                                 )
@@ -443,7 +452,7 @@ private fun AliyunConsoleWebView(
                         if (!request.isForMainFrame) return
                         publishDiagnostics { snapshot ->
                             snapshot.appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_network_error,
                                     error.errorCode
                                 )
@@ -459,7 +468,7 @@ private fun AliyunConsoleWebView(
                         if (!request.isForMainFrame) return
                         publishDiagnostics { snapshot ->
                             snapshot.appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_http_error,
                                     errorResponse.statusCode
                                 )
@@ -475,7 +484,7 @@ private fun AliyunConsoleWebView(
                         // 账号登录场景禁止继续访问证书异常页面，避免凭据被中间人截获。
                         publishDiagnostics { snapshot ->
                             snapshot.appendEvent(
-                                context.getString(
+                                resources.getString(
                                     R.string.aliyun_web_diagnostic_tls_error,
                                     error.primaryError
                                 )
@@ -567,40 +576,44 @@ internal fun AliyunWebDiagnosticsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = remember(context, configuration) {
+        context.createConfigurationContext(configuration).resources
+    }
     val displayUrl = displayWebDiagnosticUrl(diagnostics.currentUrl, redactionEnabled)
-    val cookiePolicy = context.getString(
+    val cookiePolicy = resources.getString(
         R.string.aliyun_web_diagnostic_cookie_policy_value,
         diagnostics.cookiesAccepted.toString(),
         diagnostics.thirdPartyCookiesAccepted.toString()
     )
     val cookieDetails = diagnostics.cookies.joinToString("\n") { cookie ->
         val displayValue = if (redactionEnabled) {
-            context.getString(R.string.aliyun_web_diagnostic_cookie_value_hidden)
+            resources.getString(R.string.aliyun_web_diagnostic_cookie_value_hidden)
         } else {
             cookie.maskedValue
         }
         "${cookie.name}=$displayValue"
     }.ifEmpty {
-        context.getString(R.string.aliyun_web_diagnostic_none)
+        resources.getString(R.string.aliyun_web_diagnostic_none)
     }
     val cookieSummary = "$cookiePolicy\n$cookieDetails"
     val duration = diagnostics.lastLoadDurationMillis?.let { value ->
-        context.getString(R.string.aliyun_web_diagnostic_duration_value, value)
-    } ?: context.getString(R.string.aliyun_web_diagnostic_none)
+        resources.getString(R.string.aliyun_web_diagnostic_duration_value, value)
+    } ?: resources.getString(R.string.aliyun_web_diagnostic_none)
     val eventText = diagnostics.recentEvents.joinToString("\n").ifEmpty {
-        context.getString(R.string.aliyun_web_diagnostic_no_events)
+        resources.getString(R.string.aliyun_web_diagnostic_no_events)
     }
     val report = buildString {
-        appendLine(context.getString(R.string.aliyun_web_diagnostic_current_url, displayUrl))
+        appendLine(resources.getString(R.string.aliyun_web_diagnostic_current_url, displayUrl))
         appendLine(
-            context.getString(
+            resources.getString(
                 R.string.aliyun_web_diagnostic_webview_version,
                 diagnostics.webViewVersion
             )
         )
-        appendLine(context.getString(R.string.aliyun_web_diagnostic_load_duration, duration))
-        appendLine(context.getString(R.string.aliyun_web_diagnostic_cookies, cookieSummary))
-        appendLine(context.getString(R.string.aliyun_web_diagnostic_recent_events))
+        appendLine(resources.getString(R.string.aliyun_web_diagnostic_load_duration, duration))
+        appendLine(resources.getString(R.string.aliyun_web_diagnostic_cookies, cookieSummary))
+        appendLine(resources.getString(R.string.aliyun_web_diagnostic_recent_events))
         append(eventText)
     }
 
@@ -619,7 +632,7 @@ internal fun AliyunWebDiagnosticsDialog(
                 val clipboard = context.getSystemService(ClipboardManager::class.java)
                 clipboard?.setPrimaryClip(
                     ClipData.newPlainText(
-                        context.getString(R.string.aliyun_web_diagnostics),
+                        resources.getString(R.string.aliyun_web_diagnostics),
                         report
                     )
                 )

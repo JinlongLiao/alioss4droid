@@ -50,4 +50,25 @@ class OssPreviewKindTest {
             assertEquals(OssPreviewKind.TEXT, item.previewKind())
         }
     }
+
+    /** 新格式 Office 文档应进入各自的本地预览流程，旧格式继续保持不支持。 */
+    @Test
+    fun previewKind_modernOfficeFormats_useDedicatedLocalPreview() {
+        val expected = mapOf(
+            "document.docx" to OssPreviewKind.DOCX,
+            "workbook.xlsx" to OssPreviewKind.XLSX,
+            "slides.pptx" to OssPreviewKind.PPTX,
+            "records.csv" to OssPreviewKind.DELIMITED_TEXT,
+            "records.tsv" to OssPreviewKind.DELIMITED_TEXT
+        )
+
+        expected.forEach { (name, kind) ->
+            val item = OssObjectItem.File(name, 1L, null, null)
+            assertEquals(kind, item.previewKind())
+        }
+        listOf("legacy.doc", "legacy.xls", "legacy.ppt").forEach { name ->
+            val item = OssObjectItem.File(name, 1L, null, null)
+            assertEquals(OssPreviewKind.UNSUPPORTED, item.previewKind())
+        }
+    }
 }

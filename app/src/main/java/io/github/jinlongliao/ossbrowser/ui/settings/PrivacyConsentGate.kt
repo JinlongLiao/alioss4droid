@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +46,8 @@ fun PrivacyConsentDialog(
     onReject: () -> Unit
 ) {
     val context = LocalContext.current
-    val policy = remember(context.resources.configuration) {
+    val configuration = LocalConfiguration.current
+    val policy = remember(configuration) {
         SettingsContent.privacyPolicy(context)
     }
     AlertDialog(

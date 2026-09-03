@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,6 +50,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Refresh
@@ -61,6 +63,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.OpenInNew
@@ -118,6 +121,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -139,9 +143,13 @@ import coil.request.ImageRequest
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.data.OssObjectSortDirection
+import io.github.jinlongliao.ossbrowser.data.OssObjectSortField
 import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
+import io.github.jinlongliao.ossbrowser.util.PresentationSlidePreview
+import io.github.jinlongliao.ossbrowser.util.SpreadsheetSheetPreview
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.iconForFileName
 import io.github.jinlongliao.ossbrowser.ui.settings.MarkdownText
@@ -166,6 +174,7 @@ fun BrowserScreen(
     var pendingDownload by remember { mutableStateOf<OssObjectItem.File?>(null) }
     var dialog by remember { mutableStateOf<BrowserDialog?>(null) }
     var fabMenuOpen by remember { mutableStateOf(false) }
+    var sortMenuOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     var lastBackMillis by remember { mutableStateOf(0L) }
     val backExitMsg = stringResource(R.string.browser_goback_exit)
@@ -201,11 +210,13 @@ fun BrowserScreen(
     }
 
     // 滚动到接近底部时自动加载下一页
-    val shouldLoadMore by androidx.compose.runtime.derivedStateOf {
-        val layout = listState.layoutInfo
-        val last = layout.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-        val total = layout.totalItemsCount
-        total > 0 && last >= total - 3
+    val shouldLoadMore by remember {
+        androidx.compose.runtime.derivedStateOf {
+            val layout = listState.layoutInfo
+            val last = layout.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+            val total = layout.totalItemsCount
+            total > 0 && last >= total - 3
+        }
     }
     LaunchedEffect(shouldLoadMore, state.nextMarker, state.loadingMore, state.currentBucket, state.prefix) {
         if (shouldLoadMore && state.nextMarker != null && !state.loadingMore && !state.loading) {
@@ -269,6 +280,67 @@ fun BrowserScreen(
                 },
                 actions = {
                     if (inBucketView) {
+                        Box {
+                            FilledTonalIconButton(onClick = { sortMenuOpen = true }) {
+                                Icon(
+                                    Icons.AutoMirrored.Outlined.Sort,
+                                    contentDescription = stringResource(R.string.browser_sort)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuOpen,
+                                onDismissRequest = { sortMenuOpen = false }
+                            ) {
+                                ObjectSortMenuItem(
+                                    label = stringResource(R.string.browser_sort_name_ascending),
+                                    selected = settings.ossObjectSortField == OssObjectSortField.NAME &&
+                                        settings.ossObjectSortDirection == OssObjectSortDirection.ASCENDING,
+                                    onClick = {
+                                        vm.updateObjectSort(
+                                            OssObjectSortField.NAME,
+                                            OssObjectSortDirection.ASCENDING
+                                        )
+                                        sortMenuOpen = false
+                                    }
+                                )
+                                ObjectSortMenuItem(
+                                    label = stringResource(R.string.browser_sort_name_descending),
+                                    selected = settings.ossObjectSortField == OssObjectSortField.NAME &&
+                                        settings.ossObjectSortDirection == OssObjectSortDirection.DESCENDING,
+                                    onClick = {
+                                        vm.updateObjectSort(
+                                            OssObjectSortField.NAME,
+                                            OssObjectSortDirection.DESCENDING
+                                        )
+                                        sortMenuOpen = false
+                                    }
+                                )
+                                ObjectSortMenuItem(
+                                    label = stringResource(R.string.browser_sort_time_ascending),
+                                    selected = settings.ossObjectSortField == OssObjectSortField.MODIFIED_TIME &&
+                                        settings.ossObjectSortDirection == OssObjectSortDirection.ASCENDING,
+                                    onClick = {
+                                        vm.updateObjectSort(
+                                            OssObjectSortField.MODIFIED_TIME,
+                                            OssObjectSortDirection.ASCENDING
+                                        )
+                                        sortMenuOpen = false
+                                    }
+                                )
+                                ObjectSortMenuItem(
+                                    label = stringResource(R.string.browser_sort_time_descending),
+                                    selected = settings.ossObjectSortField == OssObjectSortField.MODIFIED_TIME &&
+                                        settings.ossObjectSortDirection == OssObjectSortDirection.DESCENDING,
+                                    onClick = {
+                                        vm.updateObjectSort(
+                                            OssObjectSortField.MODIFIED_TIME,
+                                            OssObjectSortDirection.DESCENDING
+                                        )
+                                        sortMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
                         FilledTonalIconButton(onClick = { dialog = BrowserDialog.NavigatePath }) {
                             Icon(
                                 Icons.Outlined.Search,
@@ -665,6 +737,22 @@ private fun BucketRow(bucket: OssBucketInfo, onOpen: () -> Unit) {
     }
 }
 
+/**
+ * 排序菜单单项，以单选状态明确展示当前生效规则。
+ *
+ * @param label 可本地化的排序规则名称。
+ * @param selected 当前规则是否已生效。
+ * @param onClick 用户选择该规则时的回调。
+ */
+@Composable
+private fun ObjectSortMenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        leadingIcon = { RadioButton(selected = selected, onClick = null) },
+        onClick = onClick
+    )
+}
+
 @Composable
 private fun ObjectRow(
     item: OssObjectItem,
@@ -676,6 +764,7 @@ private fun ObjectRow(
     onDelete: () -> Unit,
     onMove: () -> Unit
 ) {
+    var moreMenuOpen by remember { mutableStateOf(false) }
     val rowClick: () -> Unit = when (item) {
         is OssObjectItem.Folder -> onOpen
         is OssObjectItem.File -> onPreview
@@ -708,7 +797,12 @@ private fun ObjectRow(
         val formatDateTime = rememberLocalDateTimeFormatter()
         val folderLabel = stringResource(R.string.browser_item_folder_label)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(item.displayName, fontWeight = FontWeight.Medium)
+            Text(
+                text = item.displayName,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
             when (item) {
                 is OssObjectItem.File -> Text(
                     FileUtils.humanSize(item.size) +
@@ -727,18 +821,55 @@ private fun ObjectRow(
             IconButton(onClick = onPreview) {
                 Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.cd_preview))
             }
-            IconButton(onClick = onPresign) {
-                Icon(Icons.Outlined.Link, contentDescription = stringResource(R.string.cd_presign))
-            }
-            IconButton(onClick = onDownload) {
-                Icon(Icons.Outlined.Download, contentDescription = stringResource(R.string.cd_download))
-            }
         }
-        IconButton(onClick = onMove) {
-            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = stringResource(R.string.cd_move_rename))
-        }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.cd_delete))
+        Box {
+            IconButton(onClick = { moreMenuOpen = true }) {
+                Icon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(R.string.browser_more_actions)
+                )
+            }
+            DropdownMenu(
+                expanded = moreMenuOpen,
+                onDismissRequest = { moreMenuOpen = false }
+            ) {
+                if (item is OssObjectItem.File) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_presign)) },
+                        leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
+                        onClick = {
+                            moreMenuOpen = false
+                            onPresign()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_download)) },
+                        leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                        onClick = {
+                            moreMenuOpen = false
+                            onDownload()
+                        }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.browser_move)) },
+                    leadingIcon = {
+                        Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null)
+                    },
+                    onClick = {
+                        moreMenuOpen = false
+                        onMove()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.common_delete)) },
+                    leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                    onClick = {
+                        moreMenuOpen = false
+                        onDelete()
+                    }
+                )
+            }
         }
     }
 }
@@ -1008,6 +1139,10 @@ private fun ShareLinkResultDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = remember(context, configuration) {
+        context.createConfigurationContext(configuration).resources
+    }
     val clipboard = LocalClipboardManager.current
 
     AlertDialog(
@@ -1057,7 +1192,7 @@ private fun ShareLinkResultDialog(
                             putExtra(Intent.EXTRA_TEXT, result.url)
                         }
                         context.startActivity(
-                            Intent.createChooser(send, context.getString(R.string.preview_share_link))
+                            Intent.createChooser(send, resources.getString(R.string.preview_share_link))
                         )
                     }) {
                         Icon(Icons.Outlined.Share, contentDescription = null)
@@ -1298,6 +1433,30 @@ private fun PreviewDialog(
                                     )
                                 }
                             }
+                            is PreviewState.Spreadsheet -> {
+                                val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
+                                IconButton(onClick = {
+                                    val merged = state.sheets.joinToString("\n\n") { sheet ->
+                                        sheet.name + "\n" + sheet.rows.joinToString("\n") { it.joinToString("\t") }
+                                    }
+                                    clipboard.setText(AnnotatedString(merged))
+                                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.common_copy))
+                                }
+                            }
+                            is PreviewState.Presentation -> {
+                                val copiedMsg = stringResource(R.string.preview_copy_to_clipboard)
+                                IconButton(onClick = {
+                                    val merged = state.slides.joinToString("\n\n") { slide ->
+                                        slide.texts.joinToString("\n")
+                                    }
+                                    clipboard.setText(AnnotatedString(merged))
+                                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Outlined.ContentCopy, contentDescription = stringResource(R.string.common_copy))
+                                }
+                            }
                             is PreviewState.Image, is PreviewState.Media -> {
                                 val url = when (state) {
                                     is PreviewState.Image -> state.url
@@ -1364,6 +1523,10 @@ private fun PreviewDialog(
                         )
 
                         is PreviewState.Docx -> DocxPreviewBody(paragraphs = state.paragraphs)
+
+                        is PreviewState.Spreadsheet -> SpreadsheetPreviewBody(sheets = state.sheets)
+
+                        is PreviewState.Presentation -> PresentationPreviewBody(slides = state.slides)
 
                         is PreviewState.Image -> ImagePreviewBody(url = state.url)
 
@@ -1534,6 +1697,73 @@ private fun DocxPreviewBody(paragraphs: List<String>) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+            }
+        }
+    }
+}
+
+/** 本地展示 XLSX 工作表；每个单元格使用固定宽度，表格可横向滚动。 */
+@Composable
+private fun SpreadsheetPreviewBody(sheets: List<SpreadsheetSheetPreview>) {
+    if (sheets.all { it.rows.isEmpty() }) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text(stringResource(R.string.preview_xlsx_empty))
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        items(sheets.size) { sheetIndex ->
+            val sheet = sheets[sheetIndex]
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(sheet.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Column(Modifier.horizontalScroll(rememberScrollState())) {
+                    sheet.rows.forEach { row ->
+                        Row {
+                            row.forEach { value ->
+                                Text(
+                                    text = value,
+                                    modifier = Modifier.width(140.dp).padding(8.dp),
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 本地按页展示 PPTX 中按文档顺序提取的文字内容。 */
+@Composable
+private fun PresentationPreviewBody(slides: List<PresentationSlidePreview>) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(slides.size) { slideIndex ->
+            val slide = slides[slideIndex]
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.preview_pptx_slide, slide.number),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (slide.texts.isEmpty()) {
+                        Text(stringResource(R.string.preview_pptx_empty_slide))
+                    } else {
+                        slide.texts.forEach { text -> Text(text, style = MaterialTheme.typography.bodyMedium) }
+                    }
                 }
             }
         }
@@ -1843,7 +2073,7 @@ private fun ImagePreviewBody(url: String) {
     }
 }
 
-@OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(markerClass = [UnstableApi::class])
 @Composable
 private fun MediaPreviewBody(
     url: String,

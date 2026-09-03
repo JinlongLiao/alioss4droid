@@ -156,13 +156,14 @@ android-oss/
 
 ```bash
 # macOS / Linux
-./gradlew :app:assembleDebug
+./gradlew :app:assembleLiteDebug
 
 # Windows
-gradlew.bat :app:assembleDebug
+gradlew.bat :app:assembleLiteDebug
 ```
 
-产物位于 `app/build/outputs/apk/debug/app-debug.apk`。
+产物位于 `app/build/outputs/apk/lite/debug/app-lite-debug.apk`。默认推荐 Lite 变体，不会打包
+GeckoView；只有明确需要内置浏览器内核时才使用 `assembleGeckoDebug`。
 
 ### 方式三：一键脚本（推荐，可绕过小米 HyperOS 安装限制）
 

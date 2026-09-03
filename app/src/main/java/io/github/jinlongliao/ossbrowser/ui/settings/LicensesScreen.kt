@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -51,7 +52,8 @@ import io.github.jinlongliao.ossbrowser.R
 @Composable
 fun LicensesScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val openSourceNotice = remember(context.resources.configuration) {
+    val configuration = LocalConfiguration.current
+    val openSourceNotice = remember(configuration) {
         SettingsContent.openSourceNotice(context)
     }
     Scaffold(
