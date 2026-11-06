@@ -23,6 +23,7 @@ import io.github.jinlongliao.ossbrowser.data.SettingsRepository
 import io.github.jinlongliao.ossbrowser.oss.OssClientProvider
 import io.github.jinlongliao.ossbrowser.oss.OssListCache
 import io.github.jinlongliao.ossbrowser.util.LocaleHelper
+import io.github.jinlongliao.ossbrowser.upload.UploadRepository
 
 /**
  * 应用全局 [Application] 入口，负责各类仓储 / 单例的一次性初始化：
@@ -51,6 +52,9 @@ class OssBrowserApp : Application() {
 
     lateinit var ossListCache: OssListCache
         private set
+
+    /** 跨页面共享的上传任务及持久化历史。 */
+    val uploadRepository by lazy { UploadRepository(this) }
 
     override fun attachBaseContext(newBase: Context) {
         // 在此时 settingsRepository 尚未初始化，直接读 prefs。

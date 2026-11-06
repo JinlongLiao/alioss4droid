@@ -33,7 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -48,6 +49,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.s3.isS3ConnectionValid
+import io.github.jinlongliao.ossbrowser.data.StorageType
+import androidx.compose.material3.Checkbox
 import io.github.jinlongliao.ossbrowser.data.OssProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,11 +73,21 @@ fun ProfileEditScreen(
     var sk by rememberSaveable { mutableStateOf(initial.accessKeySecret) }
     var bucket by rememberSaveable { mutableStateOf(initial.bucket) }
     var note by rememberSaveable { mutableStateOf(initial.note) }
+    // 新字段明确显示给用户；保留旧配置的 OSS 默认值。
+    var storageType by rememberSaveable { mutableStateOf(initial.storageType) }
+    var region by rememberSaveable { mutableStateOf(initial.region.ifBlank { "us-east-1" }) }
+    var sessionToken by rememberSaveable { mutableStateOf(initial.sessionToken) }
+    var forcePathStyle by rememberSaveable { mutableStateOf(initial.forcePathStyle) }
     var showSecret by rememberSaveable { mutableStateOf(false) }
+    // 本地验证连接字段，保存配置本身不发送 S3 文件请求。
+    val validConnection = if (storageType == StorageType.AWS_S3) {
+        isS3ConnectionValid(region, endpoint)
+    } else endpoint.isNotBlank()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Text(
                         stringResource(
@@ -107,10 +121,45 @@ fun ProfileEditScreen(
                 label = { Text(stringResource(R.string.profile_field_name_required)) },
                 modifier = Modifier.fillMaxWidth()
             )
+            Text(stringResource(R.string.profile_storage_type))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StorageType.entries.forEach { type ->
+                    OutlinedButton(onClick = {
+                        if (storageType != type) {
+                            storageType = type
+                            endpoint = if (type == StorageType.OSS) OssProfile.empty().endpoint else ""
+                        }
+                    }) {
+                        Text((if (storageType == type) "✓ " else "") +
+                            if (type == StorageType.OSS) stringResource(R.string.profile_storage_oss) else "AWS S3")
+                    }
+                }
+            }
+            if (storageType == StorageType.AWS_S3) {
+                S3RegionPicker(region = region, onRegionChange = { region = it })
+                OutlinedTextField(
+                    value = sessionToken,
+                    onValueChange = { sessionToken = it },
+                    label = { Text(stringResource(R.string.profile_s3_token)) },
+                    visualTransformation = if (showSecret) {
+                        VisualTransformation.None
+                    } else PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row {
+                    Checkbox(checked = forcePathStyle, onCheckedChange = { forcePathStyle = it })
+                    Text(stringResource(R.string.profile_s3_path_style))
+                }
+            } else {
+                // 地域只是填写 Endpoint 的便捷入口，打开旧配置不会改写其自定义地址。
+                OssRegionPicker(endpoint = endpoint, onEndpointChange = { endpoint = it })
+            }
             OutlinedTextField(
                 value = endpoint,
                 onValueChange = { endpoint = it },
-                label = { Text(stringResource(R.string.profile_field_endpoint_required)) },
+                label = { Text(stringResource(if (storageType == StorageType.AWS_S3) {
+                    R.string.profile_s3_endpoint
+                } else R.string.profile_field_endpoint_required)) },
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -150,8 +199,7 @@ fun ProfileEditScreen(
             )
             Button(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = name.isNotBlank() && endpoint.isNotBlank() &&
-                        ak.isNotBlank() && sk.isNotBlank(),
+                enabled = name.isNotBlank() && validConnection && ak.isNotBlank() && sk.isNotBlank(),
                 onClick = {
                     vm.save(
                         initial.copy(
@@ -160,7 +208,11 @@ fun ProfileEditScreen(
                             accessKeyId = ak.trim(),
                             accessKeySecret = sk.trim(),
                             bucket = bucket.trim(),
-                            note = note.trim()
+                            note = note.trim(),
+                            storageType = storageType,
+                            region = if (storageType == StorageType.AWS_S3) region.trim() else "",
+                            sessionToken = if (storageType == StorageType.AWS_S3) sessionToken.trim() else "",
+                            forcePathStyle = storageType == StorageType.AWS_S3 && forcePathStyle
                         )
                     )
                     onDone()

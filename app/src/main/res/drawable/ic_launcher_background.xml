@@ -1,14 +1,10 @@
-<!--
-  Copyright (C) 2026 jinlongliao
-  Licensed under the Apache License, Version 2.0.
-  ~
-  ~ Launcher adaptive-icon 背景：从右上到左下的蓝色渐变，
-  ~ 让图标在深 / 浅主题桌面上都有明显的立体层次感。
--->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <gradient
-        android:angle="135"
-        android:startColor="@color/ic_launcher_background"
-        android:endColor="@color/ic_launcher_background_dark" />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 jinlongliao. Licensed under the Apache License, Version 2.0. -->
+<!-- 青蓝至浅紫渐变铺满自适应图标背景，由桌面统一应用外轮廓。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <gradient
+      android:angle="315"
+      android:startColor="@color/ic_launcher_background"
+      android:centerColor="@color/ic_launcher_background_middle"
+      android:endColor="@color/ic_launcher_background_end" />
 </shape>

@@ -27,9 +27,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -46,8 +47,9 @@ fun PrivacyScreen(onBack: () -> Unit) {
         SettingsContent.privacyPolicy(context)
     }
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text(stringResource(R.string.settings_privacy)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

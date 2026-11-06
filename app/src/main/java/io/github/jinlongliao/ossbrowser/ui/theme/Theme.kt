@@ -19,81 +19,104 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import io.github.jinlongliao.ossbrowser.data.ThemePalette
 
-/** 默认浅色回退配色；Android 12 以下或关闭动态取色时使用。 */
-private val LightColors = lightColorScheme(
-    primary = Color(0xFF0B6BCB),
-    onPrimary = Color.White,
-    secondary = Color(0xFF3E8EDE),
-    tertiary = Color(0xFF00897B)
-)
-
-/** 默认深色回退配色；Android 12 以下或关闭动态取色时使用。 */
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFF8AB4F8),
-    onPrimary = Color(0xFF0B2B4A),
-    secondary = Color(0xFFA0C9FF),
-    tertiary = Color(0xFF4DB6AC)
-)
-
-/** Gemini Logo 的蓝、青、紫、红横向渐变，用于选中导航等品牌强调区域。 */
-private val GeminiBrandGradient = Brush.horizontalGradient(
-    colors = listOf(
-        Color(0xFF217BFE),
-        Color(0xFF078EFB),
-        Color(0xFFAC87EB),
-        Color(0xFFEE4D5D)
-    )
-)
-
 /**
- * 夏日晴空主题在远程壁纸不可用时使用的本地渐变兜底。
+ * 默认云雾蓝配色：白色内容层与低饱和蓝色强调，避免大面积彩色背景干扰文件阅读。
  *
- * 渐变只承担背景氛围，不替代内容容器；所有文字仍由 Material 3 的前景色保证对比度。
+ * @param darkTheme 是否返回低亮度的深色方案。
+ * @return 不依赖系统壁纸取色的 Material 3 配色。
  */
-private val SummerSkyBackgroundGradient = Brush.verticalGradient(
-    colors = listOf(
-        Color(0xFF82C8F4),
-        Color(0xFFCDEBFA),
-        Color(0xFFDDF4D3)
+internal fun cloudColorScheme(darkTheme: Boolean) = if (darkTheme) {
+    darkColorScheme(
+        primary = Color(0xFFA8C7FF),
+        onPrimary = Color(0xFF17375F),
+        primaryContainer = Color(0xFF263E63),
+        onPrimaryContainer = Color(0xFFDCE8FF),
+        secondary = Color(0xFFC9BEF4),
+        onSecondary = Color(0xFF352D53),
+        secondaryContainer = Color(0xFF3C3459),
+        onSecondaryContainer = Color(0xFFEAE1FF),
+        tertiary = Color(0xFF8DD4DE),
+        onTertiary = Color(0xFF07373E),
+        tertiaryContainer = Color(0xFF164650),
+        onTertiaryContainer = Color(0xFFBDEEF4),
+        background = Color(0xFF151A22),
+        onBackground = Color(0xFFE5EBF6),
+        surface = Color(0xFF202630),
+        onSurface = Color(0xFFE5EBF6),
+        surfaceVariant = Color(0xFF2D3A50),
+        onSurfaceVariant = Color(0xFFBAC7DC),
+        surfaceContainerLowest = Color(0xFF121C2D),
+        surfaceContainerLow = Color(0xFF202630),
+        surfaceContainer = Color(0xFF202D42),
+        surfaceContainerHigh = Color(0xFF28344A),
+        surfaceContainerHighest = Color(0xFF313E54),
+        outline = Color(0xFF8795AC),
+        outlineVariant = Color(0xFF3B4960)
     )
-)
-
-/**
- * “夏日晴空（by Strivy）”原主题指定的远程壁纸地址。
- *
- * App 仅在用户主动选择该主题时请求，Coil 会写入应用私有磁盘缓存；地址本身不包含凭证。
- */
-const val SUMMER_SKY_BACKGROUND_URL =
-    "https://haowallpaper.com/link/common/file/previewFileImg/18325667651636608"
+} else {
+    lightColorScheme(
+        primary = Color(0xFF355FA2),
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFFE8EFF8),
+        onPrimaryContainer = Color(0xFF1B3C6B),
+        secondary = Color(0xFF66758F),
+        onSecondary = Color.White,
+        secondaryContainer = Color(0xFFEEF0F6),
+        onSecondaryContainer = Color(0xFF443365),
+        tertiary = Color(0xFF226A78),
+        onTertiary = Color.White,
+        tertiaryContainer = Color(0xFFCDF3F7),
+        onTertiaryContainer = Color(0xFF164653),
+        background = Color(0xFFF6F8FC),
+        onBackground = Color(0xFF202D44),
+        surface = Color(0xFFFFFFFF),
+        onSurface = Color(0xFF202D44),
+        surfaceVariant = Color(0xFFE6ECF7),
+        onSurfaceVariant = Color(0xFF526079),
+        surfaceContainerLowest = Color.White,
+        surfaceContainerLow = Color(0xFFF7F9FF),
+        surfaceContainer = Color(0xFFEFF3FC),
+        surfaceContainerHigh = Color(0xFFE8EEFA),
+        surfaceContainerHighest = Color(0xFFE1E8F5),
+        outline = Color(0xFF74829B),
+        outlineVariant = Color(0xFFE5E9F0)
+    )
+}
 
 /** 全局圆角体系：强化卡片、对话框与输入组件的层次，同时保持 Material 3 组件一致性。 */
 private val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(28.dp)
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
-/**
- * 当前配色主题提供的品牌渐变；默认主题为 `null`，从而完整保留原有 Material 3 组件外观。
- */
-val LocalBrandGradient = staticCompositionLocalOf<Brush?> { null }
-
-/** 当前主题的全屏装饰背景；`null` 表示由 Material 3 背景色正常填充。 */
-val LocalAppBackground = staticCompositionLocalOf<Brush?> { null }
+/** 标题层级采用中等字重，正文保留系统字体和缩放能力，兼容中英文及无障碍字号。 */
+private val AppTypography = Typography().let { defaults ->
+    defaults.copy(
+        headlineSmall = defaults.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = defaults.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
+        titleMedium = defaults.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = defaults.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    )
+}
 
 /**
  * 构造 Gemini 固定配色，不读取系统壁纸颜色。
@@ -161,96 +184,215 @@ internal fun geminiColorScheme(darkTheme: Boolean) = if (darkTheme) {
 }
 
 /**
- * 构造“夏日晴空（by Strivy）”固定配色。
+ * 根据配色构造不透明的内容色板，背景只使用轻微色相，强调色用于操作与选中态。
  *
- * 原 CSS 的 primary、secondary 与前景色按 HSL 转换为固定 RGB；背景设为透明，
- * 由应用根节点绘制晴空背景。Surface 系列保留 75%—82% 不透明度，对应原主题的
- * 内容层透明度，同时确保列表、卡片和弹窗在复杂背景上仍可阅读。
+ * @param palette 用户选择并以枚举名持久化的主题。
+ * @param darkTheme 是否使用对应的深色方案。
+ * @return 完整色板；正文容器不依赖网络图片或背景透明度。
+ */
+internal fun appColorScheme(palette: ThemePalette, darkTheme: Boolean) = when (palette) {
+    ThemePalette.DEFAULT -> cloudColorScheme(darkTheme)
+    ThemePalette.GEMINI -> geminiColorScheme(darkTheme)
+    ThemePalette.SUMMER_SKY -> summerSkyColorScheme(darkTheme)
+    ThemePalette.CELADON -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFF9AD7BF else 0xFF286C5C),
+        container = Color(if (darkTheme) 0xFF233E34 else 0xFFDEEFE6),
+        background = Color(if (darkTheme) 0xFF151D1A else 0xFFF4F8F5)
+    )
+    ThemePalette.DUSK -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFCAB8E9 else 0xFF6B5793),
+        container = Color(if (darkTheme) 0xFF3C3250 else 0xFFEEE6F7),
+        background = Color(if (darkTheme) 0xFF1C1922 else 0xFFF8F6FA)
+    )
+    ThemePalette.SAND -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFDDC09A else 0xFF805F39),
+        container = Color(if (darkTheme) 0xFF493B29 else 0xFFF2E8D8),
+        background = Color(if (darkTheme) 0xFF201C17 else 0xFFFAF8F4)
+    )
+    ThemePalette.PRISM -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFB8C4FF else 0xFF4B60A8),
+        container = Color(if (darkTheme) 0xFF313D63 else 0xFFE6EAFF),
+        background = Color(if (darkTheme) 0xFF161B2D else 0xFFF8F7FF)
+    )
+    ThemePalette.AURORA -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFF8CDCCB else 0xFF246D68),
+        container = Color(if (darkTheme) 0xFF214540 else 0xFFD8F4EE),
+        background = Color(if (darkTheme) 0xFF101E26 else 0xFFF0FAF7)
+    )
+    ThemePalette.GLACIER_GLASS -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFA4D9F4 else 0xFF2B648B),
+        container = Color(if (darkTheme) 0xFF24465C else 0xFFE1F2FA),
+        background = Color(if (darkTheme) 0xFF142234 else 0xFFEAF5FD)
+    )
+    ThemePalette.TWILIGHT_GLASS -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFD1BCF8 else 0xFF705397),
+        container = Color(if (darkTheme) 0xFF40325A else 0xFFEDE2FA),
+        background = Color(if (darkTheme) 0xFF211A33 else 0xFFF2EDFA)
+    )
+    ThemePalette.MONOCHROME -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFF0F0F0 else 0xFF292929),
+        container = Color(if (darkTheme) 0xFF363636 else 0xFFEBEBEB),
+        background = Color(if (darkTheme) 0xFF000000 else 0xFFF7F7F7)
+    )
+    ThemePalette.TERMINAL -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFF8FE0A3 else 0xFF27623C),
+        container = Color(if (darkTheme) 0xFF173D24 else 0xFFE0F1E3),
+        background = Color(if (darkTheme) 0xFF0D1710 else 0xFFF1F7F1)
+    )
+    ThemePalette.CYBER -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFF70E7DE else 0xFF146C70),
+        container = Color(if (darkTheme) 0xFF174246 else 0xFFD9F4F3),
+        background = Color(if (darkTheme) 0xFF081620 else 0xFFF0F8FC)
+    )
+    ThemePalette.PAPER -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFE3C8A1 else 0xFF755B3C),
+        container = Color(if (darkTheme) 0xFF493C2B else 0xFFF0E4D1),
+        background = Color(if (darkTheme) 0xFF221F19 else 0xFFFAF6EC)
+    )
+    ThemePalette.SAKURA -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFF1BCD0 else 0xFF975A75),
+        container = Color(if (darkTheme) 0xFF553246 else 0xFFF7E2EC),
+        background = Color(if (darkTheme) 0xFF251C27 else 0xFFFCF4F8)
+    )
+    ThemePalette.FOREST -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFB8D5A3 else 0xFF516D3F),
+        container = Color(if (darkTheme) 0xFF33452B else 0xFFE7EFDB),
+        background = Color(if (darkTheme) 0xFF172117 else 0xFFF4F7EF)
+    )
+    ThemePalette.SEA_SALT -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFF96D6E4 else 0xFF246E7D),
+        container = Color(if (darkTheme) 0xFF1B444C else 0xFFDEF2F5),
+        background = Color(if (darkTheme) 0xFF112329 else 0xFFF0F9FA)
+    )
+    ThemePalette.SUNSET -> accentColorScheme(
+        darkTheme,
+        primary = Color(if (darkTheme) 0xFFFFC29E else 0xFF8E563B),
+        container = Color(if (darkTheme) 0xFF553927 else 0xFFFFE9DA),
+        background = Color(if (darkTheme) 0xFF291D24 else 0xFFFFF7F0)
+    )
+}.let { colors ->
+    if (palette == ThemePalette.GLACIER_GLASS || palette == ThemePalette.TWILIGHT_GLASS) {
+        colors.copy(
+            surface = colors.surface.copy(alpha = 0.92f),
+            surfaceContainerLow = colors.surfaceContainerLow.copy(alpha = 0.94f),
+            surfaceContainer = colors.surfaceContainer.copy(alpha = 0.96f),
+            outlineVariant = Color.White.copy(alpha = if (darkTheme) 0.24f else 0.8f)
+        )
+    } else if (palette == ThemePalette.MONOCHROME) {
+        colors.copy(
+            onPrimary = if (darkTheme) Color.Black else Color.White,
+            onSecondary = if (darkTheme) Color.Black else Color.White,
+            onTertiary = if (darkTheme) Color.Black else Color.White,
+            onBackground = if (darkTheme) Color(0xFFF0F0F0) else Color(0xFF252525),
+            onSurface = if (darkTheme) Color(0xFFF0F0F0) else Color(0xFF252525),
+            onSurfaceVariant = if (darkTheme) Color(0xFFBEBEBE) else Color(0xFF606060),
+            surface = if (darkTheme) Color(0xFF101010) else Color.White,
+            outlineVariant = if (darkTheme) Color(0xFF373737) else Color(0xFFE2E2E2)
+        )
+    } else colors
+}
+
+/**
+ * 旧晴空主题迁移为本地蓝青配色，保留持久化枚举名以兼容升级。
  *
  * @param darkTheme 是否返回深色方案。
- * @return 支持透明内容层的 Material 3 配色。
+ * @return 不含远程壁纸和透明正文容器的晴空色板。
  */
-internal fun summerSkyColorScheme(darkTheme: Boolean) = if (darkTheme) {
-    darkColorScheme(
-        primary = Color(0xFF318CE8),
-        onPrimary = Color.White,
-        primaryContainer = Color(0xCC173B5C),
-        onPrimaryContainer = Color(0xFFF0F2F5),
-        secondary = Color(0xFF4F9630),
-        onSecondary = Color.White,
-        secondaryContainer = Color(0xCC29461E),
-        onSecondaryContainer = Color(0xFFF0F2F5),
-        background = Color.Transparent,
-        onBackground = Color(0xFFF0F2F5),
-        surface = Color(0xCC14212D),
-        onSurface = Color(0xFFF0F2F5),
-        surfaceVariant = Color(0xCC213543),
-        onSurfaceVariant = Color(0xFFDDE5EB),
-        surfaceContainerLowest = Color(0xBF101A24),
-        surfaceContainerLow = Color(0xBF172632),
-        surfaceContainer = Color(0xCC1B2C39),
-        surfaceContainerHigh = Color(0xD1213544),
-        surfaceContainerHighest = Color(0xD1273E4E),
-        outline = Color(0x669FC4DD),
-        outlineVariant = Color(0x405E8198)
+internal fun summerSkyColorScheme(darkTheme: Boolean) = accentColorScheme(
+    darkTheme,
+    primary = Color(if (darkTheme) 0xFFA7CFE8 else 0xFF2C6488),
+    container = Color(if (darkTheme) 0xFF233E50 else 0xFFDFEDF6),
+    background = Color(if (darkTheme) 0xFF111B23 else 0xFFF2F7FA)
+)
+
+/**
+ * 为同一组内容层应用主题强调色，保证各主题的控件与弹窗仍使用一致的中性表面。
+ *
+ * @param darkTheme 是否使用深色正文和容器。
+ * @param primary 按钮、图标和选中态的强调色。
+ * @param container 低饱和强调容器色，正文使用单独的高对比文字色。
+ * @param background 页面底色，必须完全不透明。
+ * @return 已补齐各级内容层与前景色的主题色板。
+ */
+private fun accentColorScheme(darkTheme: Boolean, primary: Color, container: Color, background: Color) =
+    cloudColorScheme(darkTheme).copy(
+        primary = primary,
+        onPrimary = if (darkTheme) Color(0xFF17262B) else Color.White,
+        secondary = primary,
+        onSecondary = if (darkTheme) Color(0xFF17262B) else Color.White,
+        tertiary = primary,
+        onTertiary = if (darkTheme) Color(0xFF17262B) else Color.White,
+        primaryContainer = container,
+        secondaryContainer = container,
+        tertiaryContainer = container,
+        onPrimaryContainer = if (darkTheme) Color(0xFFE7EAF0) else Color(0xFF28353D),
+        onSecondaryContainer = if (darkTheme) Color(0xFFE7EAF0) else Color(0xFF28353D),
+        onTertiaryContainer = if (darkTheme) Color(0xFFE7EAF0) else Color(0xFF28353D),
+        background = background,
+        surface = if (darkTheme) Color(0xFF24262B) else Color.White,
+        surfaceContainerLow = if (darkTheme) Color(0xFF24262B) else Color(0xFFF9FAFB),
+        surfaceContainer = if (darkTheme) Color(0xFF2A2C31) else Color(0xFFF3F4F6),
+        surfaceContainerHigh = if (darkTheme) Color(0xFF303238) else Color(0xFFEEF0F3),
+        surfaceContainerHighest = if (darkTheme) Color(0xFF37393F) else Color(0xFFE8EBEF),
+        outlineVariant = if (darkTheme) Color(0xFF3E4249) else Color(0xFFE3E7EB)
     )
-} else {
-    lightColorScheme(
-        primary = Color(0xFF318CE8),
-        onPrimary = Color.White,
-        primaryContainer = Color(0xBFD6EDFF),
-        onPrimaryContainer = Color(0xFF0D1A26),
-        secondary = Color(0xFF5BA630),
-        onSecondary = Color.White,
-        secondaryContainer = Color(0xBFDDF1D2),
-        onSecondaryContainer = Color(0xFF17300B),
-        background = Color.Transparent,
-        onBackground = Color(0xFF0D1A26),
-        surface = Color(0xBFFFFFFF),
-        onSurface = Color(0xFF0D1A26),
-        surfaceVariant = Color(0xCCEAF5FC),
-        onSurfaceVariant = Color(0xFF29475F),
-        surfaceContainerLowest = Color(0xBFFFFFFF),
-        surfaceContainerLow = Color(0xBFF7FCFF),
-        surfaceContainer = Color(0xC7F0F8FD),
-        surfaceContainerHigh = Color(0xCCE8F3F9),
-        surfaceContainerHighest = Color(0xD1E0EEF6),
-        outline = Color(0x66517086),
-        outlineVariant = Color(0x40517086)
-    )
-}
 
 /**
  * 应用 Material 3 主题。
  *
  * @param darkTheme 是否使用深色方案。
  * @param palette 用户选择的配色主题。
- * @param dynamicColor 默认主题是否允许 Android 12+ 系统动态取色；自定义主题始终使用固定色。
+ * @param dynamicColor 是否显式启用默认主题的系统取色；默认关闭以保持与启动图标一致。
  * @param content 主题作用域内的 Compose 内容。
  */
 @Composable
 fun OssBrowserTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     palette: ThemePalette = ThemePalette.DEFAULT,
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val scheme = when {
-        palette == ThemePalette.GEMINI -> geminiColorScheme(darkTheme)
-        palette == ThemePalette.SUMMER_SKY -> summerSkyColorScheme(darkTheme)
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val ctx = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
-    val brandGradient = GeminiBrandGradient.takeIf { palette == ThemePalette.GEMINI }
-    val appBackground = SummerSkyBackgroundGradient.takeIf { palette == ThemePalette.SUMMER_SKY }
-    CompositionLocalProvider(
-        LocalBrandGradient provides brandGradient,
-        LocalAppBackground provides appBackground
+    val scheme = if (
+        palette == ThemePalette.DEFAULT && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     ) {
-        MaterialTheme(colorScheme = scheme, shapes = AppShapes, content = content)
+        val context = LocalContext.current
+        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        appColorScheme(palette, darkTheme)
+    }
+    val visuals = themeVisualStyle(palette, darkTheme)
+    val family = when (palette) {
+        ThemePalette.PAPER -> FontFamily.Serif
+        ThemePalette.TERMINAL, ThemePalette.CYBER -> FontFamily.Monospace
+        else -> null
+    }
+    val typography = if (family == null) AppTypography else AppTypography.copy(
+        titleLarge = AppTypography.titleLarge.copy(fontFamily = family),
+        titleMedium = AppTypography.titleMedium.copy(fontFamily = family),
+        bodyLarge = AppTypography.bodyLarge.copy(fontFamily = family),
+        bodyMedium = AppTypography.bodyMedium.copy(fontFamily = family),
+        bodySmall = AppTypography.bodySmall.copy(fontFamily = family),
+        labelLarge = AppTypography.labelLarge.copy(fontFamily = family)
+    )
+    CompositionLocalProvider(LocalThemeVisualStyle provides visuals) {
+        val shapes = AppShapes.copy(
+            medium = RoundedCornerShape(visuals.cornerRadius),
+            small = RoundedCornerShape(if (visuals.cornerRadius < 12.dp) visuals.cornerRadius else 12.dp)
+        )
+        MaterialTheme(colorScheme = scheme, shapes = shapes, typography = typography, content = content)
     }
 }

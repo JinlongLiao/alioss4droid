@@ -1,5 +1,7 @@
 # 设计文档
 
+> 文档定位：保留的初始设计、需求或旧版英文使用说明。当前 1.0.5 的实现、构建要求与验收边界以[文档索引](文档索引.md)、[中文使用手册](USAGE.zh-CN.md)和[发布记录](1.0.5发布与清理记录.md)为准。
+
 > Language / 语言：**简体中文** · [English](DESIGN.md)
 
 > **应用名**: OSS Browser for Android  ·  **作者**: [jinlongliao](https://github.com/JinlongLiao/)  ·  **仓库**: <https://github.com/JinlongLiao/alioss4droid>  ·  **许可证**: [Apache License 2.0](../LICENSE)  ·  **包名**: `io.github.jinlongliao.ossbrowser`

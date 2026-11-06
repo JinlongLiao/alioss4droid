@@ -18,10 +18,17 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // AWS 多平台发布依赖 Gradle module 元数据，部分镜像缺失该元数据及 JVM 构件。
+        exclusiveContent {
+            forRepository { mavenCentral() }
+            filter {
+                includeGroup("aws.sdk.kotlin")
+                includeGroup("aws.smithy.kotlin")
+            }
+        }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://maven.aliyun.com/repository/central") }
-        maven { url = uri("https://maven.mozilla.org/maven2/") }
         google()
         mavenCentral()
     }

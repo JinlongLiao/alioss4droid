@@ -15,10 +15,12 @@
  */
 package io.github.jinlongliao.ossbrowser.ui.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,16 +36,17 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.jinlongliao.ossbrowser.R
+import io.github.jinlongliao.ossbrowser.data.StorageType
 import io.github.jinlongliao.ossbrowser.data.OssProfile
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,8 +76,9 @@ fun ProfileListScreen(
     var pendingDelete by remember { mutableStateOf<OssProfile?>(null) }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text(stringResource(R.string.profiles_title)) },
                 navigationIcon = {
                     if (onBack != null) {
@@ -93,24 +98,27 @@ fun ProfileListScreen(
             }
         }
     ) { padding ->
-        if (state.profiles.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.profiles_empty), color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(state.profiles, key = { it.id }) { p ->
-                    ProfileItem(
-                        profile = p,
-                        active = p.id == state.activeId,
-                        onActivate = { vm.activate(p.id) },
-                        onEdit = { onEdit(p.id) },
-                        onDelete = { pendingDelete = p }
-                    )
+        Column(Modifier.fillMaxSize().padding(padding)) {
+
+            if (state.profiles.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.profiles_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(state.profiles, key = { it.id }) { p ->
+                        ProfileItem(
+                            profile = p,
+                            active = p.id == state.activeId,
+                            onActivate = { vm.activate(p.id) },
+                            onEdit = { onEdit(p.id) },
+                            onDelete = { pendingDelete = p }
+                        )
+                    }
                 }
             }
         }
@@ -135,6 +143,7 @@ fun ProfileListScreen(
     }
 }
 
+/** 配置卡片以容器色和边框突出当前激活账号，编辑、删除仍为独立操作。 */
 @Composable
 private fun ProfileItem(
     profile: OssProfile,
@@ -144,7 +153,15 @@ private fun ProfileItem(
     onDelete: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onActivate)
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onActivate),
+        colors = CardDefaults.cardColors(
+            containerColor = if (active) MaterialTheme.colorScheme.primaryContainer
+            else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            1.dp,
+            if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Row(
             modifier = Modifier.padding(12.dp).fillMaxWidth(),
@@ -152,12 +169,25 @@ private fun ProfileItem(
         ) {
             Icon(
                 imageVector = if (active) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                tint = if (active) MaterialTheme.colorScheme.primary else Color.Gray,
+                tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 contentDescription = null
             )
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 val displayName = profile.name.ifBlank { stringResource(R.string.profiles_unnamed) }
                 Text(displayName, fontWeight = FontWeight.SemiBold)
+                // 根据保存的协议类型展示标签，不依靠名称或 Endpoint 猜测配置来源。
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Text(
+                        text = stringResource(if (profile.storageType == StorageType.OSS) {
+                            R.string.profile_storage_oss
+                        } else R.string.profile_storage_s3),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
                 val bucketLine = if (profile.bucket.isBlank())
                     stringResource(R.string.profiles_default_bucket_any)
                 else
@@ -165,12 +195,14 @@ private fun ProfileItem(
                 Text(
                     bucketLine,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    profile.endpoint,
+                    if (profile.storageType == StorageType.AWS_S3) {
+                        "AWS S3 · ${profile.region}" + profile.endpoint.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+                    } else profile.endpoint,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onEdit) {
@@ -180,6 +212,5 @@ private fun ProfileItem(
                 Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.common_delete))
             }
         }
-        HorizontalDivider()
     }
 }

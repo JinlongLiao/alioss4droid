@@ -74,6 +74,15 @@ class OssObjectSortTest {
         assertEquals(listOf("folder/", "new.txt", "old.txt", "unknown.txt"), descending.map { it.key })
     }
 
+    /** 同时间且只在大小写上不同的文件，在缓存/分页输入顺序变化后仍有确定次序。 */
+    @Test
+    fun identicalTimesAndCaseInsensitiveNamesHaveStableOrder() {
+        val items = listOf(file("a.txt", 1), file("A.txt", 1))
+        val first = sortOssObjectItems(items, OssObjectSortField.MODIFIED_TIME, OssObjectSortDirection.DESCENDING)
+        val reversedInput = sortOssObjectItems(items.reversed(), OssObjectSortField.MODIFIED_TIME, OssObjectSortDirection.DESCENDING)
+        assertEquals(first, reversedInput)
+    }
+
     /** 创建测试目录对象。 */
     private fun folder(key: String): OssObjectItem.Folder = OssObjectItem.Folder(key)
 

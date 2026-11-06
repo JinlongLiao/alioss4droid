@@ -45,10 +45,9 @@ fun sortOssObjectItems(
 private fun <T : OssObjectItem> displayNameComparator(
     direction: OssObjectSortDirection,
 ): Comparator<T> = Comparator { left, right ->
-    applySortDirection(
-        left.displayName.compareTo(right.displayName, ignoreCase = true),
-        direction,
-    )
+    val nameResult = left.displayName.compareTo(right.displayName, ignoreCase = true)
+    // 大小写不敏感同名和同时间文件也要有稳定次序，避免分页合并/缓存恢复后随机换位。
+    applySortDirection(if (nameResult != 0) nameResult else left.key.compareTo(right.key), direction)
 }
 
 /** 根据字段与方向构造文件比较器，并将未知修改时间固定放在末尾。 */

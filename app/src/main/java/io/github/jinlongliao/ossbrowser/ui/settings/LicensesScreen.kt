@@ -36,7 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -57,8 +57,9 @@ fun LicensesScreen(onBack: () -> Unit) {
         SettingsContent.openSourceNotice(context)
     }
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text(stringResource(R.string.settings_licenses)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -122,7 +123,7 @@ fun LicensesScreen(onBack: () -> Unit) {
                     Text(
                         lic.url,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 HorizontalDivider()

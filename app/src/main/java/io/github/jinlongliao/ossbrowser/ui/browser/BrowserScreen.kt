@@ -15,11 +15,20 @@
  */
 package io.github.jinlongliao.ossbrowser.ui.browser
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
+import java.io.File
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -27,12 +36,17 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import io.github.jinlongliao.ossbrowser.ui.theme.LocalThemeVisualStyle
+import io.github.jinlongliao.ossbrowser.ui.theme.themedCardSurface
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -45,17 +59,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import io.github.jinlongliao.ossbrowser.data.BrowserLayoutMode
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
-import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -75,19 +87,16 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,7 +110,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -111,10 +120,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -141,11 +153,13 @@ import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
+import io.github.jinlongliao.ossbrowser.OssBrowserApp
+import io.github.jinlongliao.ossbrowser.ui.CloudPageHeader
 import io.github.jinlongliao.ossbrowser.R
-import io.github.jinlongliao.ossbrowser.data.OssObjectSortDirection
-import io.github.jinlongliao.ossbrowser.data.OssObjectSortField
 import io.github.jinlongliao.ossbrowser.ui.TonalIcon
+import io.github.jinlongliao.ossbrowser.oss.StorageIcons
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
 import io.github.jinlongliao.ossbrowser.util.PresentationSlidePreview
@@ -156,6 +170,8 @@ import io.github.jinlongliao.ossbrowser.ui.settings.MarkdownText
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsViewModel
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import java.text.DateFormat
+import io.github.jinlongliao.ossbrowser.upload.isUploadActive
+import io.github.jinlongliao.ossbrowser.upload.UploadTasksDialog
 import java.util.Date
 import java.util.Locale
 
@@ -170,12 +186,21 @@ fun BrowserScreen(
     val settings by settingsVm.state.collectAsState()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    // 任务来源独立于浏览器状态；刷新、切目录和重建页面都不会清空任务。
+    val uploadTasks by OssBrowserApp.instance.uploadRepository.tasks.collectAsState()
+    var showUploads by remember { mutableStateOf(false) }
+    if (showUploads) UploadTasksDialog(uploadTasks) { showUploads = false }
 
     var pendingDownload by remember { mutableStateOf<OssObjectItem.File?>(null) }
     var dialog by remember { mutableStateOf<BrowserDialog?>(null) }
-    var fabMenuOpen by remember { mutableStateOf(false) }
-    var sortMenuOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val waterfallState = rememberLazyStaggeredGridState()
+    val layoutMode = settings.browserLayoutMode
+    // 排序或布局切换后回到顶部；两种容器均重置，避免旧布局的滚动锚点影响新首项。
+    LaunchedEffect(settings.ossObjectSortField, settings.ossObjectSortDirection, layoutMode) {
+        listState.scrollToItem(0)
+        waterfallState.scrollToItem(0)
+    }
     var lastBackMillis by remember { mutableStateOf(0L) }
     val backExitMsg = stringResource(R.string.browser_goback_exit)
 
@@ -194,11 +219,14 @@ fun BrowserScreen(
     }
 
     // 路径跳转后滚动到目标文件并给予短暂高亮；若目标尚未加载到，则持续翻页直到出现或到底
-    LaunchedEffect(state.highlightKey, state.items, state.nextMarker, state.loadingMore) {
+    LaunchedEffect(state.highlightKey, state.items, state.nextMarker, state.loadingMore, layoutMode) {
         val key = state.highlightKey ?: return@LaunchedEffect
         val idx = state.items.indexOfFirst { it.key == key }
         if (idx >= 0) {
-            runCatching { listState.animateScrollToItem(idx) }
+            runCatching {
+                if (layoutMode == BrowserLayoutMode.WATERFALL) waterfallState.animateScrollToItem(idx)
+                else listState.animateScrollToItem(idx)
+            }
             kotlinx.coroutines.delay(2500L)
             vm.clearHighlight()
         } else if (state.nextMarker != null && !state.loadingMore) {
@@ -209,12 +237,20 @@ fun BrowserScreen(
         }
     }
 
-    // 滚动到接近底部时自动加载下一页
-    val shouldLoadMore by remember {
+    // 两种容器接近底部时均沿用原有分页流程；瀑布流可见项按最大索引判断，不依赖列顺序。
+    val shouldLoadMore by remember(layoutMode) {
         androidx.compose.runtime.derivedStateOf {
-            val layout = listState.layoutInfo
-            val last = layout.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
-            val total = layout.totalItemsCount
+            val last: Int
+            val total: Int
+            if (layoutMode == BrowserLayoutMode.WATERFALL) {
+                val layout = waterfallState.layoutInfo
+                last = layout.visibleItemsInfo.maxOfOrNull { it.index } ?: return@derivedStateOf false
+                total = layout.totalItemsCount
+            } else {
+                val layout = listState.layoutInfo
+                last = layout.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+                total = layout.totalItemsCount
+            }
             total > 0 && last >= total - 3
         }
     }
@@ -224,9 +260,29 @@ fun BrowserScreen(
         }
     }
 
+    // Android 13 起通知需要运行时授权；拒绝后仍可在任务列表查看上传。
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) Toast.makeText(context, R.string.upload_notification_denied, Toast.LENGTH_LONG).show()
+    }
     val pickFile = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let { vm.upload(context, it) } }
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            uris.forEach { uri ->
+                try {
+                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (exception: SecurityException) {
+                    // 部分提供方只支持临时授权；当前上传仍可执行，重启后可能需要重新选择文件。
+                    Log.w("BrowserScreen", "文档不支持持久读取授权 uri=$uri", exception)
+                }
+                vm.upload(context, uri)
+            }
+            showUploads = true
+        }
+    }
 
     val createFile = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -258,14 +314,17 @@ fun BrowserScreen(
     val inBucketView = state.currentBucket != null
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = {
                     Column {
                         Text(
                             state.activeProfile?.name
                                 ?: stringResource(R.string.browser_no_profile_title),
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         val subtitle = when {
                             state.activeProfile == null ->
@@ -275,129 +334,44 @@ fun BrowserScreen(
                             else ->
                                 stringResource(R.string.browser_bucket_list_subtitle)
                         }
-                        Text(subtitle, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 },
                 actions = {
-                    if (inBucketView) {
-                        Box {
-                            FilledTonalIconButton(onClick = { sortMenuOpen = true }) {
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.Sort,
-                                    contentDescription = stringResource(R.string.browser_sort)
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = sortMenuOpen,
-                                onDismissRequest = { sortMenuOpen = false }
-                            ) {
-                                ObjectSortMenuItem(
-                                    label = stringResource(R.string.browser_sort_name_ascending),
-                                    selected = settings.ossObjectSortField == OssObjectSortField.NAME &&
-                                        settings.ossObjectSortDirection == OssObjectSortDirection.ASCENDING,
-                                    onClick = {
-                                        vm.updateObjectSort(
-                                            OssObjectSortField.NAME,
-                                            OssObjectSortDirection.ASCENDING
-                                        )
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                ObjectSortMenuItem(
-                                    label = stringResource(R.string.browser_sort_name_descending),
-                                    selected = settings.ossObjectSortField == OssObjectSortField.NAME &&
-                                        settings.ossObjectSortDirection == OssObjectSortDirection.DESCENDING,
-                                    onClick = {
-                                        vm.updateObjectSort(
-                                            OssObjectSortField.NAME,
-                                            OssObjectSortDirection.DESCENDING
-                                        )
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                ObjectSortMenuItem(
-                                    label = stringResource(R.string.browser_sort_time_ascending),
-                                    selected = settings.ossObjectSortField == OssObjectSortField.MODIFIED_TIME &&
-                                        settings.ossObjectSortDirection == OssObjectSortDirection.ASCENDING,
-                                    onClick = {
-                                        vm.updateObjectSort(
-                                            OssObjectSortField.MODIFIED_TIME,
-                                            OssObjectSortDirection.ASCENDING
-                                        )
-                                        sortMenuOpen = false
-                                    }
-                                )
-                                ObjectSortMenuItem(
-                                    label = stringResource(R.string.browser_sort_time_descending),
-                                    selected = settings.ossObjectSortField == OssObjectSortField.MODIFIED_TIME &&
-                                        settings.ossObjectSortDirection == OssObjectSortDirection.DESCENDING,
-                                    onClick = {
-                                        vm.updateObjectSort(
-                                            OssObjectSortField.MODIFIED_TIME,
-                                            OssObjectSortDirection.DESCENDING
-                                        )
-                                        sortMenuOpen = false
-                                    }
-                                )
-                            }
-                        }
-                        FilledTonalIconButton(onClick = { dialog = BrowserDialog.NavigatePath }) {
-                            Icon(
-                                Icons.Outlined.Search,
-                                contentDescription = stringResource(R.string.browser_jump_path)
-                            )
-                        }
-                    }
-                    FilledTonalIconButton(onClick = { vm.refresh() }) {
-                        Icon(
-                            Icons.Filled.Refresh,
-                            contentDescription = stringResource(R.string.common_refresh)
-                        )
-                    }
-                    FilledTonalIconButton(onClick = onOpenProfiles) {
-                        Icon(
-                            Icons.Outlined.VpnKey,
-                            contentDescription = stringResource(R.string.cd_keys)
-                        )
-                    }
+                    BrowserToolbarActions(
+                        hasActiveProfile = state.activeProfile != null,
+                        inBucketView = inBucketView,
+                        layoutMode = layoutMode,
+                        sortField = settings.ossObjectSortField,
+                        sortDirection = settings.ossObjectSortDirection,
+                        activeUploadCount = uploadTasks.count { it.status.isUploadActive() },
+                        onRefresh = vm::refresh,
+                        onLayoutChange = settingsVm::setBrowserLayoutMode,
+                        onSortChange = vm::updateObjectSort,
+                        onUploadFile = { pickFile.launch(arrayOf("*/*")) },
+                        onCreateFolder = { dialog = BrowserDialog.Mkdir },
+                        onJumpToPath = { dialog = BrowserDialog.NavigatePath },
+                        onOpenProfiles = onOpenProfiles,
+                        onOpenUploads = { showUploads = true }
+                    )
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbar) },
-        floatingActionButton = {
-            if (inBucketView) {
-                Box {
-                    ExtendedFloatingActionButton(
-                        onClick = { fabMenuOpen = true },
-                        icon = { Icon(Icons.Filled.Add, null) },
-                        text = { Text(stringResource(R.string.browser_fab_actions)) }
-                    )
-                    DropdownMenu(
-                        expanded = fabMenuOpen,
-                        onDismissRequest = { fabMenuOpen = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.browser_upload_file)) },
-                            leadingIcon = { Icon(Icons.Filled.Upload, null) },
-                            onClick = {
-                                fabMenuOpen = false
-                                pickFile.launch(arrayOf("*/*"))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.browser_mkdir)) },
-                            leadingIcon = { Icon(Icons.Filled.CreateNewFolder, null) },
-                            onClick = {
-                                fabMenuOpen = false
-                                dialog = BrowserDialog.Mkdir
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            if (state.activeProfile == null) {
+                CloudPageHeader(
+                    title = stringResource(R.string.brand_files_title),
+                    subtitle = stringResource(R.string.brand_files_description)
+                )
+            }
             if (inBucketView) {
                 Breadcrumb(
                     currentBucket = state.currentBucket!!,
@@ -455,16 +429,17 @@ fun BrowserScreen(
                             Text(stringResource(R.string.common_refresh))
                         }
                     }
-                    else -> LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 24.dp)
-                    ) {
-                        items(state.buckets, key = { it.name }) { b ->
-                            BucketRow(
-                                bucket = b,
-                                onOpen = { vm.selectBucket(b.name, b.extranetEndpoint) }
-                            )
-                        }
+                    else -> BrowserItemsLayout(
+                        entries = state.buckets,
+                        layoutMode = layoutMode,
+                        itemKey = { it.name },
+                        bottomPadding = 24.dp
+                    ) { bucket, waterfall ->
+                        BucketRow(
+                            bucket = bucket,
+                            waterfall = waterfall,
+                            onOpen = { vm.selectBucket(bucket.name, bucket.extranetEndpoint) }
+                        )
                     }
                 }
                 // === Object 列表视图 ===
@@ -480,55 +455,57 @@ fun BrowserScreen(
                         Text(stringResource(R.string.common_refresh))
                     }
                 }
-                else -> LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 96.dp)
-                ) {
-                    items(state.items, key = { it.key }) { item ->
-                        ObjectRow(
-                            item = item,
-                            highlighted = item.key == state.highlightKey,
-                            onOpen = {
-                                if (item is OssObjectItem.Folder) vm.enterFolder(item.key)
-                            },
-                            onPreview = {
-                                if (item is OssObjectItem.File) vm.preview(item)
-                            },
-                            onDownload = {
-                                if (item is OssObjectItem.File) {
-                                    pendingDownload = item
-                                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                        addCategory(Intent.CATEGORY_OPENABLE)
-                                        type = "*/*"
-                                        putExtra(Intent.EXTRA_TITLE, item.displayName)
-                                    }
-                                    createFile.launch(intent)
-                                }
-                            },
-                            onPresign = {
-                                if (item is OssObjectItem.File) {
-                                    vm.clearCustomDomains()
-                                    dialog = BrowserDialog.ShareLink(item)
-                                }
-                            },
-                            onDelete = {
-                                if (settings.confirmDestructiveOps) {
-                                    dialog = BrowserDialog.ConfirmDelete(item)
-                                } else {
-                                    vm.delete(item.key)
-                                }
-                            },
-                            onMove = { dialog = BrowserDialog.Move(item) }
-                        )
-                    }
-                    item(key = "__footer__") {
+                else -> BrowserItemsLayout(
+                    entries = state.items,
+                    layoutMode = layoutMode,
+                    itemKey = { it.key },
+                    bottomPadding = 24.dp,
+                    listState = listState,
+                    waterfallState = waterfallState,
+                    footer = {
                         ListFooter(
                             hasMore = state.nextMarker != null,
                             loadingMore = state.loadingMore,
                             onLoadMore = { vm.loadMore() }
                         )
                     }
+                ) { item, waterfall ->
+                    ObjectRow(
+                        item = item,
+                        waterfall = waterfall,
+                        highlighted = item.key == state.highlightKey,
+                        onOpen = {
+                            if (item is OssObjectItem.Folder) vm.enterFolder(item.key)
+                        },
+                        onPreview = {
+                            if (item is OssObjectItem.File) vm.preview(item)
+                        },
+                        onDownload = {
+                            if (item is OssObjectItem.File) {
+                                pendingDownload = item
+                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = "*/*"
+                                    putExtra(Intent.EXTRA_TITLE, item.displayName)
+                                }
+                                createFile.launch(intent)
+                            }
+                        },
+                        onPresign = {
+                            if (item is OssObjectItem.File) {
+                                vm.clearCustomDomains()
+                                dialog = BrowserDialog.ShareLink(item)
+                            }
+                        },
+                        onDelete = {
+                            if (settings.confirmDestructiveOps) {
+                                dialog = BrowserDialog.ConfirmDelete(item)
+                            } else {
+                                vm.delete(item.key)
+                            }
+                        },
+                        onMove = { dialog = BrowserDialog.Move(item) }
+                    )
                 }
             }
         }
@@ -698,65 +675,56 @@ private fun Breadcrumb(
     }
 }
 
+/** Bucket 摘要卡；列表横排，瀑布流纵排并依内容自适应高度，点击沿用目录流程。 */
 @Composable
-private fun BucketRow(bucket: OssBucketInfo, onOpen: () -> Unit) {
-    val formatDateTime = rememberLocalDateTimeFormatter()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        TonalIcon(Icons.Filled.Storage, contentDescription = null)
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(bucket.name, fontWeight = FontWeight.Medium)
-            val meta = buildList {
-                bucket.location?.takeIf { it.isNotBlank() }?.let { add(it) }
-                bucket.storageClass?.takeIf { it.isNotBlank() }?.let { add(it) }
-                bucket.createDate?.let { add(formatDateTime(it)) }
-            }.joinToString("  ·  ")
-            if (meta.isNotEmpty()) {
-                Text(
-                    meta,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            bucket.extranetEndpoint?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+private fun BucketRow(bucket: OssBucketInfo, waterfall: Boolean = false, onOpen: () -> Unit) {
+    val bucketColor = MaterialTheme.colorScheme.primary
+    val iconStyle = LocalThemeVisualStyle.current.iconStyle
+    val bucketIcon = remember(bucketColor, iconStyle) { StorageIcons.createBucketIcon(bucketColor, iconStyle) }
+    val container = Modifier.fillMaxWidth()
+        .then(if (waterfall) Modifier else Modifier.padding(horizontal = 16.dp, vertical = 5.dp))
+        .themedCardSurface()
+        .clickable(onClick = onOpen)
+        .padding(horizontal = 16.dp, vertical = 14.dp)
+    if (waterfall) {
+        Column(container, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Image(rememberVectorPainter(bucketIcon), contentDescription = null, modifier = Modifier.size(48.dp))
+            BucketDescription(bucket)
+        }
+    } else {
+        Row(container, verticalAlignment = Alignment.CenterVertically) {
+            Image(rememberVectorPainter(bucketIcon), contentDescription = null, modifier = Modifier.size(44.dp))
+            BucketDescription(bucket, Modifier.weight(1f).padding(horizontal = 12.dp))
         }
     }
 }
 
-/**
- * 排序菜单单项，以单选状态明确展示当前生效规则。
- *
- * @param label 可本地化的排序规则名称。
- * @param selected 当前规则是否已生效。
- * @param onClick 用户选择该规则时的回调。
- */
+/** 两种排布共用的 Bucket 名称、地域与 Endpoint，元数据不因切换布局丢失。 */
 @Composable
-private fun ObjectSortMenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(label) },
-        leadingIcon = { RadioButton(selected = selected, onClick = null) },
-        onClick = onClick
-    )
+private fun BucketDescription(bucket: OssBucketInfo, modifier: Modifier = Modifier) {
+    val formatDateTime = rememberLocalDateTimeFormatter()
+    Column(modifier) {
+        Text(bucket.name, fontWeight = FontWeight.Medium)
+        val meta = buildList {
+            bucket.location?.takeIf { it.isNotBlank() }?.let { add(it) }
+            bucket.storageClass?.takeIf { it.isNotBlank() }?.let { add(it) }
+            bucket.createDate?.let { add(formatDateTime(it)) }
+        }.joinToString("  ·  ")
+        if (meta.isNotEmpty()) {
+            Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        bucket.extranetEndpoint?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
+/** 文件和目录卡；双列使用竖向内容，两种布局共享预览、菜单及稳定文件 key。 */
 @Composable
 private fun ObjectRow(
     item: OssObjectItem,
     highlighted: Boolean = false,
+    waterfall: Boolean = false,
     onOpen: () -> Unit,
     onPreview: () -> Unit,
     onDownload: () -> Unit,
@@ -771,106 +739,111 @@ private fun ObjectRow(
     }
     val bg = if (highlighted) MaterialTheme.colorScheme.primaryContainer
     else MaterialTheme.colorScheme.surface
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(bg)
+    Column(
+        modifier = Modifier.fillMaxWidth()
+            .then(if (waterfall) Modifier else Modifier.padding(horizontal = 16.dp, vertical = 5.dp))
+            .themedCardSurface(bg)
             .clickable(onClick = rowClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp, vertical = 12.dp)
     ) {
-        val (iconVec, iconTint) = when (item) {
-            is OssObjectItem.Folder -> Icons.Outlined.Folder to MaterialTheme.colorScheme.primary
-            is OssObjectItem.File -> {
-                val spec = iconForFileName(item.displayName)
-                spec.icon to spec.tint
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val folderColor = MaterialTheme.colorScheme.primary
+            val iconStyle = LocalThemeVisualStyle.current.iconStyle
+            val folderIcon = remember(folderColor, iconStyle) { StorageIcons.createFolderIcon(folderColor, iconStyle) }
+            val itemIcon = when (item) {
+                is OssObjectItem.Folder -> folderIcon
+                is OssObjectItem.File -> remember(item.displayName) {
+                    iconForFileName(item.displayName).icon
+                }
             }
-        }
-        TonalIcon(
-            imageVector = iconVec,
-            contentDescription = null,
-            tint = iconTint,
-            containerColor = iconTint.copy(alpha = 0.14f)
-        )
-        val formatDateTime = rememberLocalDateTimeFormatter()
-        val folderLabel = stringResource(R.string.browser_item_folder_label)
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(
-                text = item.displayName,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+            Image(
+                painter = rememberVectorPainter(itemIcon),
+                contentDescription = null,
+                modifier = Modifier.size(44.dp)
             )
-            when (item) {
-                is OssObjectItem.File -> Text(
-                    FileUtils.humanSize(item.size) +
-                            (item.lastModified?.let { "  ·  ${formatDateTime(it)}" } ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                is OssObjectItem.Folder -> Text(
-                    folderLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        if (item is OssObjectItem.File) {
-            IconButton(onClick = onPreview) {
-                Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.cd_preview))
-            }
-        }
-        Box {
-            IconButton(onClick = { moreMenuOpen = true }) {
-                Icon(
-                    Icons.Outlined.MoreVert,
-                    contentDescription = stringResource(R.string.browser_more_actions)
-                )
-            }
-            DropdownMenu(
-                expanded = moreMenuOpen,
-                onDismissRequest = { moreMenuOpen = false }
-            ) {
+            if (waterfall) {
+                Spacer(Modifier.weight(1f))
+            } else {
+                ObjectItemDescription(item, Modifier.weight(1f).padding(horizontal = 12.dp))
                 if (item is OssObjectItem.File) {
+                    IconButton(onClick = onPreview) {
+                        Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.cd_preview))
+                    }
+                }
+            }
+            Box {
+                IconButton(onClick = { moreMenuOpen = true }) {
+                    Icon(
+                        Icons.Outlined.MoreVert,
+                        contentDescription = stringResource(R.string.browser_more_actions)
+                    )
+                }
+                DropdownMenu(
+                    expanded = moreMenuOpen,
+                    onDismissRequest = { moreMenuOpen = false }
+                ) {
+                    if (item is OssObjectItem.File) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browser_presign)) },
+                            leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
+                            onClick = {
+                                moreMenuOpen = false
+                                onPresign()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.browser_download)) },
+                            leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                            onClick = {
+                                moreMenuOpen = false
+                                onDownload()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_presign)) },
-                        leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null) },
+                        text = { Text(stringResource(R.string.browser_move)) },
+                        leadingIcon = {
+                            Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null)
+                        },
                         onClick = {
                             moreMenuOpen = false
-                            onPresign()
+                            onMove()
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.browser_download)) },
-                        leadingIcon = { Icon(Icons.Outlined.Download, contentDescription = null) },
+                        text = { Text(stringResource(R.string.common_delete)) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
                         onClick = {
                             moreMenuOpen = false
-                            onDownload()
+                            onDelete()
                         }
                     )
                 }
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.browser_move)) },
-                    leadingIcon = {
-                        Icon(Icons.AutoMirrored.Filled.DriveFileMove, contentDescription = null)
-                    },
-                    onClick = {
-                        moreMenuOpen = false
-                        onMove()
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.common_delete)) },
-                    leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
-                    onClick = {
-                        moreMenuOpen = false
-                        onDelete()
-                    }
-                )
             }
         }
+        if (waterfall) {
+            ObjectItemDescription(item, Modifier.padding(top = 10.dp), maxNameLines = 4)
+        }
+    }
+}
+
+/** 名称与文件大小/修改时间展示，两种排布均使用同一份元数据格式。 */
+@Composable
+private fun ObjectItemDescription(item: OssObjectItem, modifier: Modifier = Modifier, maxNameLines: Int = 2) {
+    val formatDateTime = rememberLocalDateTimeFormatter()
+    Column(modifier) {
+        Text(
+            text = item.displayName,
+            fontWeight = FontWeight.Medium,
+            maxLines = maxNameLines,
+            overflow = TextOverflow.Ellipsis
+        )
+        val details = when (item) {
+            is OssObjectItem.File -> FileUtils.humanSize(item.size) +
+                (item.lastModified?.let { "  ·  ${formatDateTime(it)}" } ?: "")
+            is OssObjectItem.Folder -> stringResource(R.string.browser_item_folder_label)
+        }
+        Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -920,23 +893,29 @@ private fun ListFooter(
                     modifier = Modifier.size(18.dp),
                     strokeWidth = 2.dp
                 )
-                Text(stringResource(R.string.browser_loading), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(stringResource(R.string.browser_loading), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             hasMore -> TextButton(onClick = onLoadMore) { Text(stringResource(R.string.browser_load_more)) }
             else -> Text(
                 stringResource(R.string.browser_all_loaded),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
 }
 
+/** 有留白的空态提示；不改变调用方的配置、刷新或取消操作。 */
 @Composable
 private fun EmptyHint(text: String, action: (@Composable () -> Unit)? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text, color = Color.Gray)
+        Column(
+            modifier = Modifier.padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TonalIcon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(64.dp))
+            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
             action?.invoke()
         }
     }
@@ -965,7 +944,7 @@ private fun NavigatePathDialog(
                 Text(
                     stringResource(R.string.nav_path_help),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -1033,7 +1012,7 @@ private fun ShareLinkInputDialog(
                 Text(
                     stringResource(R.string.presign_file_label, item.displayName),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 ShareModeOption(
                     selected = mode == ShareLinkMode.SIGNED,
@@ -1059,7 +1038,7 @@ private fun ShareLinkInputDialog(
                     Text(
                         stringResource(R.string.presign_expire_help),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
@@ -1098,7 +1077,7 @@ private fun ShareLinkInputDialog(
                     Text(
                         stringResource(R.string.share_public_help),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -1153,13 +1132,13 @@ private fun ShareLinkResultDialog(
                 Text(
                     stringResource(R.string.presign_file_label, result.key),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (result.expireHours != null) {
                     Text(
                         stringResource(R.string.presign_result_expire, result.expireHours),
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
@@ -1169,7 +1148,7 @@ private fun ShareLinkResultDialog(
                             stringResource(R.string.share_result_public_cname, result.customDomain)
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 OutlinedTextField(
@@ -1236,7 +1215,7 @@ private fun MoveDialog(
                 Text(
                     stringResource(R.string.move_source_label, item.key),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
                     value = dest,
@@ -1294,13 +1273,13 @@ private fun ConfirmMoveDialog(
                 Text(
                     stringResource(R.string.confirm_move_source),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(item.key, style = MaterialTheme.typography.bodySmall)
                 Text(
                     stringResource(R.string.confirm_move_target),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(targetKey, style = MaterialTheme.typography.bodySmall)
             }
@@ -1347,7 +1326,7 @@ private fun PreviewDialog(
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(Modifier.fillMaxSize()) {
-                TopAppBar(
+                AppTopBar(
                     title = {
                         Text(
                             state.name,
@@ -1776,6 +1755,7 @@ private fun PresentationPreviewBody(slides: List<PresentationSlidePreview>) {
  */
 @Composable
 private fun LoadingPreviewBody(state: PreviewState.Loading) {
+    // 文件类型图标始终使用固定图形和类别色，与目录图标的主题材质独立。
     val spec = remember(state.name) { iconForFileName(state.name) }
     val downloaded = state.downloadedBytes
     val total = state.totalBytes
@@ -1792,7 +1772,7 @@ private fun LoadingPreviewBody(state: PreviewState.Loading) {
         Icon(
             imageVector = spec.icon,
             contentDescription = null,
-            tint = spec.tint,
+            tint = Color.Unspecified,
             modifier = Modifier.size(72.dp)
         )
         Spacer(Modifier.size(16.dp))
@@ -1974,75 +1954,96 @@ private fun ErrorPreviewBody(
     }
 }
 
+/** PDF只为可见列表项后台渲染Bitmap，不在Main一次性分配所有页面。 */
 @Composable
 private fun PdfPreviewBody(filePath: String) {
+    // produceState更换key不保证清除旧value；按文档隔离整个子树，避免A页闪现在B标题下。
+    key(filePath) { PdfPreviewDocumentBody(filePath) }
+}
+
+/** 每个文档独占一个渲染会话；屏幕宽度变化只重建页面任务，继续复用同一native renderer。 */
+@Composable
+private fun PdfPreviewDocumentBody(filePath: String) {
     val context = LocalContext.current
-    val file = remember(filePath) { java.io.File(filePath) }
-    // 通过 remember + produceState 在后台线程一次性渲染所有页；大 PDF 分页懒加载更优，
-    // 这里优先简单实现。渲染出的 Bitmap 会随 composable 销毁释放。
-    val pagesState = androidx.compose.runtime.produceState<List<android.graphics.Bitmap>?>(
-        initialValue = null,
-        filePath
-    ) {
-        value = runCatching {
-            val pfd = android.os.ParcelFileDescriptor.open(
-                file, android.os.ParcelFileDescriptor.MODE_READ_ONLY
-            )
-            val renderer = android.graphics.pdf.PdfRenderer(pfd)
-            val result = ArrayList<android.graphics.Bitmap>(renderer.pageCount)
-            try {
-                val dm = context.resources.displayMetrics
-                val targetWidthPx = dm.widthPixels
-                for (i in 0 until renderer.pageCount) {
-                    renderer.openPage(i).use { page ->
-                        val ratio = targetWidthPx.toFloat() / page.width.toFloat()
-                        val w = (page.width * ratio).toInt().coerceAtLeast(1)
-                        val h = (page.height * ratio).toInt().coerceAtLeast(1)
-                        val bmp = android.graphics.Bitmap.createBitmap(
-                            w, h, android.graphics.Bitmap.Config.ARGB_8888
-                        )
-                        bmp.eraseColor(android.graphics.Color.WHITE)
-                        page.render(
-                            bmp, null, null,
-                            android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
-                        )
-                        result.add(bmp)
-                    }
-                }
-            } finally {
-                runCatching { renderer.close() }
-                runCatching { pfd.close() }
-            }
-            result.toList()
-        }.getOrElse {
-            emptyList()
+    val file = remember(filePath) { File(filePath) }
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val renderWidthPixels = remember(screenWidthDp, context.resources.displayMetrics.densityDpi) {
+        context.resources.displayMetrics.widthPixels
+    }
+    val sessionState = produceState<Result<PdfPreviewRenderer>?>(null, filePath) {
+        var opened: PdfPreviewRenderer? = null
+        try {
+            val session = withContext(Dispatchers.IO) { PdfPreviewRenderer.open(file).also { opened = it } }
+            value = Result.success(session)
+            awaitDispose { session.closeAsync() }
+        } catch (exception: CancellationException) {
+            opened?.closeAsync()
+            throw exception
+        } catch (exception: Exception) {
+            opened?.closeAsync()
+            Log.e("PdfPreview", "打开PDF失败 path=$filePath", exception)
+            value = Result.failure(exception)
         }
     }
-
-    val pages = pagesState.value
+    val result = sessionState.value
+    val session = result?.getOrNull()
     when {
-        pages == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-        pages.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(stringResource(R.string.preview_pdf_failed))
-        }
+        session == null || session.pageCount == 0 -> Box(
+            Modifier.fillMaxSize(), contentAlignment = Alignment.Center
+        ) { Text(stringResource(R.string.preview_pdf_failed)) }
         else -> LazyColumn(
             modifier = Modifier.fillMaxSize().background(Color(0xFFEEEEEE)),
             contentPadding = PaddingValues(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(pages.size) { idx ->
-                val bmp = pages[idx]
-                Box(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.foundation.Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = stringResource(R.string.preview_pdf_page, idx + 1),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            items(session.pageCount) { index ->
+                key(session, index, renderWidthPixels) {
+                    // LazyColumn仅组合可见/预取项，离屏状态销毁后不再持有整份文档的Bitmap集合。
+                    val pageState = produceState<Result<PdfRenderedPage>?>(null, session, index, renderWidthPixels) {
+                        value = try {
+                            Result.success(session.renderPage(index, renderWidthPixels))
+                        } catch (exception: CancellationException) {
+                            throw exception
+                        } catch (exception: Exception) {
+                            Log.e("PdfPreview", "渲染PDF失败 path=$filePath page=$index", exception)
+                            Result.failure(exception)
+                        }
+                    }
+                    val page = pageState.value?.getOrNull()
+                    val bitmap = page?.bitmap
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            bitmap != null -> {
+                                val density = LocalDensity.current
+                                val displaySize = pdfPageDisplaySize(
+                                    requireNotNull(page).aspectRatio, with(density) { maxWidth.toPx() }
+                                )
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = stringResource(R.string.preview_pdf_page, index + 1),
+                                        modifier = with(density) {
+                                            Modifier.size(displaySize.width.toDp(), displaySize.height.toDp())
+                                        },
+                                        contentScale = ContentScale.FillBounds
+                                    )
+                                    if (displaySize.reduced) {
+                                        Text(stringResource(R.string.preview_pdf_extreme_page_hint))
+                                    }
+                                }
+                            }
+                            pageState.value == null -> Box(
+                                Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center
+                            ) { CircularProgressIndicator() }
+                            else -> Text(stringResource(R.string.preview_pdf_failed))
+                        }
+                    }
                 }
             }
         }

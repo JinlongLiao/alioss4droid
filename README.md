@@ -5,12 +5,14 @@
 > Repository slug: `alioss4droid` · the user-visible app name is **OSS Browser for Android**.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-![minSdk](https://img.shields.io/badge/minSdk-26-green)
+![minSdk](https://img.shields.io/badge/minSdk-31-green)
 ![targetSdk](https://img.shields.io/badge/targetSdk-34-green)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7f52ff)
-![Compose](https://img.shields.io/badge/Jetpack%20Compose-BoM%202024.09-4285f4)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7f52ff)
+![Compose](https://img.shields.io/badge/Jetpack%20Compose-BoM%202024.10.01-4285f4)
 
-> A native Android client for **Aliyun OSS (Alibaba Cloud Object Storage)**, inspired by
+> Current version: **1.0.5**. See the [documentation index](docs/文档索引.md) for current delivery and validation records.
+
+> A native Android client for **Aliyun OSS and AWS S3**, inspired by
 > [aliyun/oss-browser](https://github.com/aliyun/oss-browser) but tailored for mobile.
 > Built with **Kotlin + Jetpack Compose + Material 3**, suitable as a daily tool to manage buckets,
 > browse objects and preview files on the go.
@@ -27,10 +29,8 @@
 
 ### Account & security
 
-- Manage multiple OSS profiles (AK/SK + Endpoint): create / edit / delete / switch active.
+- Manage multiple OSS / AWS S3 profiles (AK/SK + Endpoint / Region): create / edit / delete / switch active.
 - Credentials stored in `EncryptedSharedPreferences` (AES‑256‑GCM, Android Keystore backed).
-- Optional embedded Alibaba Cloud web console: remembers the account type and username, keeps
-  WebView cookies, and delegates password autofill to the system without exposing it to the app.
 - Multi-endpoint `OSSClient` cache (per profile × endpoint) — cross-region buckets just work.
 - Privacy Policy consent gate on first launch; privacy & OSS notice surfaces inside Settings.
 - **Encrypted one-click export / import of OSS profiles** for device-to-device sharing.
@@ -38,12 +38,14 @@
 
 ### Browse & file operations
 
-- Bucket list and object list use **lazy pagination** (10 per page by default; auto-load on scroll).
-- Folder-first sort, then case-insensitive name ascending.
+- Name-ascending object browsing uses **lazy pagination** (10 per page by default; auto-load on scroll).
+- Folder-first sorting by name or modified time, ascending or descending; changes apply immediately.
+- Time/name-descending sort loads current-directory metadata up to 10,000 entries; name ascending uses lazy pagination.
 - Breadcrumb / parent navigation / direct path jump (if the path is a file, jump to its parent and highlight).
 - System back gesture mapping: inside a folder → go up one level; bucket list → two quick taps to exit.
 - **Local cache** (in-memory + disk, 30-minute TTL): navigation is instant; tap Refresh to force network.
-- Upload (SAF, with progress), download (`CREATE_DOCUMENT` lets you pick destination), delete,
+- Persistent multi-file background uploads, notification progress, per-task cancellation,
+  resumable multipart uploads and history cleanup; download (`CREATE_DOCUMENT` lets you pick destination), delete,
   move / rename (recursive for folders).
 - Destructive actions (delete / move) have a confirmation dialog — can be disabled in Settings.
 - Generate signed temporary URLs (1–168h) or unsigned public URLs; public links can use enabled
@@ -72,17 +74,18 @@
 
 | Area | Choice |
 | --- | --- |
-| Language | Kotlin 2.0.21 |
-| UI | Jetpack Compose (Compose BoM 2024.09) + Material 3 |
+| Language | Kotlin 2.4.10 |
+| UI | Jetpack Compose (Compose BoM 2024.10.01) + Material 3 |
 | Navigation | Navigation Compose |
 | State | ViewModel + StateFlow + Kotlin Coroutines |
 | Secure storage | `androidx.security:security-crypto` (EncryptedSharedPreferences) |
 | Serialization | `kotlinx.serialization` JSON |
-| Cloud SDK | `com.aliyun.dpa:oss-android-sdk` 2.9.13 |
+| Cloud SDK | `com.aliyun.dpa:oss-android-sdk` 2.9.21 |
+| AWS S3 | `aws.sdk.kotlin:s3` 1.9.31 |
 | Image | Coil 2.7.0 + coil-gif |
 | Media | Media3 ExoPlayer 1.4.1 |
 | Crypto | AES‑256‑GCM + PBKDF2‑HMAC‑SHA256 (200k) for profile export |
-| Build | AGP 8.5.2 + Gradle 8.9 + Version Catalog |
+| Build | AGP 9.1.1 + Gradle 9.3.1 + Version Catalog |
 
 ---
 
@@ -91,11 +94,11 @@
 | Requirement | Version |
 | --- | --- |
 | JDK | **17** (Temurin 17 LTS recommended) |
-| Android SDK | `compileSdk = 34`, `minSdk = 26`, `targetSdk = 34` |
-| Android Gradle Plugin | 8.5.2 |
-| Gradle | 8.9 (wrapper committed) |
-| Kotlin | 2.0.21 |
-| Android Studio | **Koala Feature Drop (2024.1.2)+** |
+| Android SDK | `compileSdk = 37`, `minSdk = 31`, `targetSdk = 34` |
+| Android Gradle Plugin | 9.1.1 |
+| Gradle | 9.3.1 (wrapper committed) |
+| Kotlin | 2.4.10 |
+| Android Studio | An Android Studio version compatible with the configured AGP; CLI builds use the wrapper |
 
 > Aliyun Maven mirrors are pre-configured in `settings.gradle.kts` to speed up dependency resolution in mainland China.
 
@@ -116,15 +119,13 @@
 
 ```bash
 # macOS / Linux
-./gradlew :app:assembleLiteDebug
+./gradlew :app:assembleDebug
 
 # Windows
-gradlew.bat :app:assembleLiteDebug
+gradlew.bat :app:assembleDebug
 ```
 
-The APK lands at `app/build/outputs/apk/lite/debug/app-lite-debug.apk`. The Lite variant is the
-default recommendation and does not package GeckoView; use `assembleGeckoDebug` only when the
-bundled browser engine is required.
+The APK lands at `app/build/outputs/apk/debug/app-debug.apk`. The app uses a single build variant without an embedded web console or GeckoView dependency.
 
 ### Option C · One-shot script (recommended for Xiaomi HyperOS)
 
@@ -192,7 +193,7 @@ magic "ALOS" | version | mode | salt(16) | iv(12) | AES‑256‑GCM(ciphertext)
 - **Password mode**: AES key = `PBKDF2WithHmacSHA256(password, salt, 200_000, 256)` → even another
   install cannot decode without the password. Recommended when sharing across accounts.
 
-Importing merges by `id`, then by `(endpoint + AccessKey ID)`; duplicates are overwritten and new
+Importing merges by `id`, then by protocol, region and connection identity; duplicates are overwritten and new
 entries are appended. Cached bucket / folder listings are invalidated automatically.
 
 ---
@@ -229,6 +230,8 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md) (English), [docs/USAGE.zh-CN.md
 
 ## 📚 Documentation
 
+- [Current documentation and validation index](docs/文档索引.md)
+- [1.0.5 release and cleanup record](docs/1.0.5发布与清理记录.md)
 - [Requirements (PRD)](docs/REQUIREMENTS.md) · [中文](docs/REQUIREMENTS.zh-CN.md)
 - [Design](docs/DESIGN.md) · [中文](docs/DESIGN.zh-CN.md)
 - [User guide](docs/USAGE.md) · [中文](docs/USAGE.zh-CN.md)
@@ -238,10 +241,10 @@ Full walkthrough: [docs/USAGE.md](docs/USAGE.md) (English), [docs/USAGE.zh-CN.md
 
 ## 🧭 Roadmap
 
-- [ ] Resumable / multipart upload (`ResumableUploadRequest`).
+- [x] OSS / S3 resumable multipart uploads, background tasks, cancellation and history cleanup.
 - [ ] Multi-select batch delete / move / download.
 - [ ] Object ACL & storage class editing.
-- [ ] STS temporary credentials.
+- [x] Manually supplied S3 SessionToken; automatic credential refresh remains unsupported.
 - [ ] QR code / bulk export of presigned links.
 
 ---
@@ -275,4 +278,4 @@ limitations under the License.
 ```
 
 For bundled third-party components and their licenses see **Settings → Open source licenses** in
-the app, or `app/src/main/java/io/github/jinlongliao/ossbrowser/ui/settings/SettingsContent.kt`.
+the app, or `app/src/main/java/io/github/jinlongliao/ossbrowser/ui/settings/LicensesScreen.kt`.

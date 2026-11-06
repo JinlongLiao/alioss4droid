@@ -1,4 +1,5 @@
 import java.util.Properties
+import javax.xml.parsers.DocumentBuilderFactory
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -18,6 +19,17 @@ val keystoreProps = Properties().apply {
 val hasReleaseKeystore = keystoreProps.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true
 val hasDebugKeystore = keystoreProps.getProperty("debugStoreFile")?.let { rootProject.file(it).exists() } == true
 
+// Robolectric 的 Maven resolver 不展开 settings.xml 中的用户目录变量，仅传入同一配置的实际路径。
+val mavenUserHome = System.getProperty("user.home")
+val mavenSettingsFile = File(mavenUserHome, ".m2/settings.xml")
+val configuredMavenRepository = if (mavenSettingsFile.exists()) {
+    DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(mavenSettingsFile)
+        .getElementsByTagName("localRepository").item(0)?.textContent?.trim()?.takeIf { it.isNotBlank() }
+} else null
+val testMavenRepository = configuredMavenRepository
+    ?.replace("${'$'}{user.home}", mavenUserHome)
+    ?: File(mavenUserHome, ".m2/repository").absolutePath
+
 android {
     namespace = "io.github.jinlongliao.ossbrowser"
     compileSdk = 37
@@ -26,25 +38,12 @@ android {
         applicationId = "io.github.jinlongliao.ossbrowser"
         minSdk = 31
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.5"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         vectorDrawables { useSupportLibrary = true }
 
-    }
-
-    flavorDimensions += "browserEngine"
-    productFlavors {
-        create("lite") {
-            dimension = "browserEngine"
-            buildConfigField("boolean", "HAS_GECKOVIEW", "false")
-            versionNameSuffix = "-lite"
-        }
-        create("gecko") {
-            dimension = "browserEngine"
-            buildConfigField("boolean", "HAS_GECKOVIEW", "true")
-            versionNameSuffix = "-gecko"
-        }
     }
 
     signingConfigs {
@@ -112,6 +111,16 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.all {
+            it.systemProperty("maven.repo.local", testMavenRepository)
+            // 默认不访问真实账号；仅显式给出私有配置文件时运行只读账号连接测试。
+            providers.gradleProperty("s3ConnectionConfig").orNull?.let { path ->
+                it.systemProperty("alioss.s3.connectionConfig", path)
+            }
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -147,15 +156,16 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(libs.aliyun.oss.android)
-    // Lite 仅在编译期解析 Gecko API，最终 APK 不携带内核；Gecko 变体才打包完整实现。
-    compileOnly(libs.mozilla.geckoview)
-    "geckoImplementation"(libs.mozilla.geckoview)
-
+    implementation(libs.aws.s3)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
 
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
     testImplementation(libs.junit)
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
+    testImplementation("org.robolectric:robolectric:4.16.1")
 }

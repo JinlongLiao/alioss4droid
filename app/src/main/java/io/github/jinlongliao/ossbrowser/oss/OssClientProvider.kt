@@ -19,6 +19,8 @@ import android.content.Context
 import com.alibaba.sdk.android.oss.ClientConfiguration
 import com.alibaba.sdk.android.oss.OSSClient
 import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider
+import io.github.jinlongliao.ossbrowser.data.StorageType
+import io.github.jinlongliao.ossbrowser.s3.S3Storage
 import io.github.jinlongliao.ossbrowser.data.OssProfile
 import io.github.jinlongliao.ossbrowser.data.OssProfileRepository
 import java.util.concurrent.ConcurrentHashMap
@@ -47,13 +49,34 @@ class OssClientProvider(
     @Volatile private var serviceClient: OSSClient? = null
     @Volatile private var serviceClientProfileId: String? = null
 
+    /** 按账号协议返回 S3 适配器；上传使用固定 profileId，普通文件操作使用当前激活配置。 */
+    fun s3Storage(
+        endpoint: String? = null, profileId: String? = null,
+        expectedType: StorageType? = null, region: String? = null, forcePathStyle: Boolean? = null
+    ): S3Storage? {
+        val profile = if (profileId == null) repository.active() else {
+            repository.snapshot().firstOrNull { it.id == profileId }
+        }
+        if (expectedType != null) {
+            requireNotNull(profile) { "上传账号已删除" }
+            check(profile.storageType == expectedType) { "账号存储类型已变更，请重新选择文件上传" }
+        }
+        return profile?.takeIf { it.storageType == StorageType.AWS_S3 }?.let {
+            S3Storage(it.copy(region = region ?: it.region, forcePathStyle = forcePathStyle ?: it.forcePathStyle), endpoint)
+        }
+    }
+
     /**
      * 返回用于 bucket 级操作的 client。
+     * @param profileId 上传任务固定的账号 ID；为空时使用当前激活配置。
      * @param endpoint 如果为空则使用 profile 自身的 endpoint；
      *                 否则按该 endpoint（通常是目标 bucket 的 `extranetEndpoint`）创建 / 取缓存。
      */
-    fun current(endpoint: String? = null): Pair<OSSClient, OssProfile>? {
-        val profile = repository.active() ?: return null
+    fun current(endpoint: String? = null, profileId: String? = null): Pair<OSSClient, OssProfile>? {
+        val profile = if (profileId == null) repository.active() else
+            repository.snapshot().firstOrNull { it.id == profileId }
+        profile ?: return null
+        require(profile.storageType == StorageType.OSS) { "S3 配置不能使用 OSS 客户端" }
         val ep = normalizeEndpoint(
             endpoint?.takeIf { it.isNotBlank() } ?: profile.endpoint
         )

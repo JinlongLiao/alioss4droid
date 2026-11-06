@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Launcher 背景主色：阿里云品牌蓝（用于 adaptive-icon background）。 -->
-    <color name="ic_launcher_background">#1677FF</color>
-    <!-- Launcher 背景辅助色：深蓝，用于渐变底色。 -->
-    <color name="ic_launcher_background_dark">#0B4AB0</color>
-    <!-- Launcher 前景主题色：阿里云 OSS 橙，用于上传/下载箭头。 -->
-    <color name="ic_launcher_accent">#FF6A00</color>
+  <!-- 启动图标青蓝至浅紫渐变：起始、中间、终点色。 -->
+  <color name="ic_launcher_background">#89EAF5</color>
+  <color name="ic_launcher_background_middle">#95B9F6</color>
+  <color name="ic_launcher_background_end">#CCB4F7</color>
 </resources>

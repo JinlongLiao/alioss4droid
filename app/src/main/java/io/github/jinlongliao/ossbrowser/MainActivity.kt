@@ -31,7 +31,7 @@ import io.github.jinlongliao.ossbrowser.util.LocaleHelper
 
 /**
  * 应用启动 Activity：负责初始化 Jetpack Compose UI 根节点 [OssBrowserRoot]，
- * 并根据用户设置组合配色主题（默认/Gemini）与显示模式（明/暗/跟随系统）。
+ * 并根据用户设置组合配色主题（云端/Gemini/夏日晴空）与显示模式（明/暗/跟随系统）。
  *
  * 通过 [attachBaseContext] 在 Activity 上下文层面套一层 [LocaleHelper] 语言包装，
  * 与 [OssBrowserApp.attachBaseContext] 保持一致，避免语言切换后 Activity 仍用旧 locale。

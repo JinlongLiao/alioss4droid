@@ -15,11 +15,16 @@
  */
 package io.github.jinlongliao.ossbrowser.oss
 
-import android.content.Context
-import android.net.Uri
 import android.util.Xml
+import io.github.jinlongliao.ossbrowser.data.StorageType
+import com.alibaba.sdk.android.oss.OSSClient
 import com.alibaba.sdk.android.oss.ClientException
 import com.alibaba.sdk.android.oss.ServiceException
+import com.alibaba.sdk.android.oss.callback.OSSCompletedCallback
+import com.alibaba.sdk.android.oss.model.PutObjectResult
+import com.alibaba.sdk.android.oss.model.ResumableUploadRequest
+import com.alibaba.sdk.android.oss.model.ResumableUploadResult
+import com.alibaba.sdk.android.oss.internal.OSSAsyncTask
 import com.alibaba.sdk.android.oss.model.CopyObjectRequest
 import com.alibaba.sdk.android.oss.model.DeleteObjectRequest
 import com.alibaba.sdk.android.oss.model.GetObjectRequest
@@ -28,7 +33,14 @@ import com.alibaba.sdk.android.oss.model.ListObjectsRequest
 import com.alibaba.sdk.android.oss.model.PutObjectRequest
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.NonCancellable
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
@@ -40,15 +52,15 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * OSS 业务封装：全部在 IO 线程执行，异常抛出给调用方。目录模型：以 `/` 结尾的 key 表示目录。
+ * 对象存储操作入口，按配置协议分发到 AWS S3 或 OSS。OSS 业务封装：全部在 IO 线程执行，异常抛出给调用方。目录模型：以 `/` 结尾的 key 表示目录。
  *
  * Bucket / endpoint 都作为显式参数：同一个 profile（AK/SK）可用来访问该账号下任意 bucket；
  * 不同 region 的 bucket 通过传入各自的 `endpoint` 路由到正确区域。
  */
 class OssService(private val provider: OssClientProvider) {
 
-    private fun bucketClient(endpoint: String?) =
-        provider.current(endpoint)
+    private fun bucketClient(endpoint: String?, profileId: String? = null) =
+        provider.current(endpoint, profileId)
             ?: throw IllegalStateException("未选择 OSS 配置，请先在「密钥」中新建并激活。")
 
     private fun serviceClient() =
@@ -57,6 +69,7 @@ class OssService(private val provider: OssClientProvider) {
 
     /** 列出当前账号下所有 bucket。 */
     suspend fun listBuckets(): List<OssBucketInfo> = withContext(Dispatchers.IO) {
+        provider.s3Storage()?.let { return@withContext it.listS3Buckets() }
         val (client, _) = serviceClient()
         val result = client.listBuckets(ListBucketsRequest())
         result.buckets.map { b ->
@@ -78,7 +91,33 @@ class OssService(private val provider: OssClientProvider) {
         maxKeys: Int = 200,
         endpoint: String? = null
     ): ListPage = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint)?.let { return@withContext it.listS3Objects(bucket, prefix, marker, maxKeys) }
         val (client, _) = bucketClient(endpoint)
+        listOssObjects(client, bucket, prefix, marker, maxKeys)
+    }
+
+    /**
+     * 一次目录扫描捕获同一账号客户端；S3 复用连接池，OSS 分页请求在 IO 线程运行。
+     * 只提供当前层的元数据分页函数，不增加网络请求或改变任何文件内容。
+     */
+    suspend fun <T> withObjectDirectoryListing(
+        bucket: String, prefix: String, endpoint: String?, profileId: String? = null,
+        action: suspend (suspend (String?, Int) -> ListPage) -> T
+    ): T = withContext(Dispatchers.IO) {
+        // 分页追加也可能首次构造SDK客户端；捕获和释放都不能依赖调用方恰好已在后台线程。
+        provider.s3Storage(endpoint, profileId)?.let {
+            return@withContext it.withS3DirectoryListing(bucket, prefix, action)
+        }
+        val (client, _) = bucketClient(endpoint, profileId)
+        action { marker, maxKeys ->
+            withContext(Dispatchers.IO) { listOssObjects(client, bucket, prefix, marker, maxKeys) }
+        }
+    }
+
+    /** 复用已捕获的 OSS 客户端读取单页，保持现有目录分组和元数据映射。 */
+    private fun listOssObjects(
+        client: OSSClient, bucket: String, prefix: String, marker: String?, maxKeys: Int
+    ): ListPage {
         val req = ListObjectsRequest(bucket).apply {
             this.prefix = prefix
             delimiter = "/"
@@ -102,7 +141,7 @@ class OssService(private val provider: OssClientProvider) {
                 )
             }
 
-        ListPage(
+        return ListPage(
             items = (folders + files).sortedWith(FolderFirstByName),
             nextMarker = if (result.isTruncated) result.nextMarker else null
         )
@@ -127,14 +166,19 @@ class OssService(private val provider: OssClientProvider) {
         }
     }
 
-    /** 以 `/` 结尾的空对象代表"目录"。 */
+    /**
+     * 以 `/` 结尾的空对象代表目录，IO线程完成请求后返回创建的key。
+     * @param profileId 提交时捕获的账号ID，避免排队期间切换账号将请求发往其他身份。
+     */
     suspend fun mkdir(
         bucket: String,
         prefix: String,
         name: String,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ) = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.createS3Directory(bucket, prefix, name) }
+        val (client, _) = bucketClient(endpoint, profileId)
         val key = buildString {
             append(prefix)
             append(name.trim('/'))
@@ -145,40 +189,111 @@ class OssService(private val provider: OssClientProvider) {
         key
     }
 
+    /**
+     * 上传任务的固定文件快照；8 MiB 起使用分片断点续传，小文件及空文件使用普通 PUT。
+     * 取消保留断点，等待 SDK 收尾后才返回，避免清理或重试与旧请求争用文件。
+     * @param bucket 固定目标 bucket。
+     * @param key 固定目标对象路径。
+     * @param source 已完整复制的本地快照，上传期间不得修改。
+     * @param records 此任务专属的 SDK 断点目录。
+     * @param profileId 固定账号 ID。
+     * @param endpoint 固定区域地址。
+     * @param onProgress SDK 的已发送和总字节数回调，可能由工作线程调用。
+     * @return 成功上传的对象路径。
+     * @see <a href="https://www.alibabacloud.com/help/en/oss/developer-reference/resumable-upload-4">断点续传</a>
+     */
     suspend fun upload(
-        context: Context,
         bucket: String,
-        prefix: String,
-        uri: Uri,
-        overrideName: String? = null,
-        endpoint: String? = null,
-        onProgress: (sent: Long, total: Long) -> Unit = { _, _ -> }
+        key: String,
+        source: File,
+        records: File,
+        profileId: String,
+        endpoint: String?,
+        storageType: StorageType? = null,
+        s3Region: String? = null,
+        s3ForcePathStyle: Boolean? = null,
+        onProgress: (sent: Long, total: Long) -> Unit
     ): String = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
-        val fileName = overrideName?.takeIf { it.isNotBlank() }
-            ?: FileUtils.displayName(context, uri)
-            ?: "unnamed_${System.currentTimeMillis()}"
-
-        val tempFile = FileUtils.copyUriToCache(context, uri, fileName)
+        provider.s3Storage(endpoint, profileId, storageType, s3Region, s3ForcePathStyle)?.let {
+            return@withContext it.uploadS3File(bucket, key, source, records, onProgress)
+        }
+        val (client, _) = provider.current(endpoint, profileId)
+            ?: error("上传账号已删除，请重新选择账号和文件")
+        var sdkTask: OSSAsyncTask<*>? = null
         try {
-            val key = prefix + fileName
-            val req = PutObjectRequest(bucket, key, tempFile.absolutePath)
-            req.setProgressCallback { _, sent, total -> onProgress(sent, total) }
-            client.putObject(req)
-            key
+            suspendCancellableCoroutine { continuation ->
+                if (source.length() >= 8L * 1024 * 1024) {
+                    check(records.mkdirs() || records.isDirectory) { "无法创建上传断点目录" }
+                    val request = ResumableUploadRequest(bucket, key, source.absolutePath, records.absolutePath)
+                    request.setDeleteUploadOnCancelling(false)
+                    request.partSize = maxOf(2L * 1024 * 1024, (source.length() + 9998) / 9999)
+                    request.setProgressCallback { _, sent, total -> onProgress(sent, total) }
+                    sdkTask = client.asyncResumableUpload(
+                        request,
+                        object : OSSCompletedCallback<ResumableUploadRequest, ResumableUploadResult> {
+                            /** 远端合并成功后才报告完成。 */
+                            override fun onSuccess(request: ResumableUploadRequest, result: ResumableUploadResult) {
+                                continuation.resume(key)
+                            }
+
+                            /** 保留供应方错误，由服务记录完整上下文和堆栈。 */
+                            override fun onFailure(
+                                request: ResumableUploadRequest,
+                                clientException: ClientException?,
+                                serviceException: ServiceException?
+                            ) {
+                                continuation.resumeWithException(
+                                    serviceException ?: clientException ?: IllegalStateException("OSS 上传失败")
+                                )
+                            }
+                        }
+                    )
+                } else {
+                    val request = PutObjectRequest(bucket, key, source.absolutePath)
+                    request.setProgressCallback { _, sent, total -> onProgress(sent, total) }
+                    sdkTask = client.asyncPutObject(
+                        request,
+                        object : OSSCompletedCallback<PutObjectRequest, PutObjectResult> {
+                            /** 普通 PUT 成功后报告完成。 */
+                            override fun onSuccess(request: PutObjectRequest, result: PutObjectResult) {
+                                continuation.resume(key)
+                            }
+
+                            /** 小文件失败同样保留根因。 */
+                            override fun onFailure(
+                                request: PutObjectRequest,
+                                clientException: ClientException?,
+                                serviceException: ServiceException?
+                            ) {
+                                continuation.resumeWithException(
+                                    serviceException ?: clientException ?: IllegalStateException("OSS 上传失败")
+                                )
+                            }
+                        }
+                    )
+                }
+                continuation.invokeOnCancellation { sdkTask?.cancel() }
+            }
         } finally {
-            tempFile.delete()
+            // SDK cancel 仅请求取消，不代表工作线程已退出；等待退出后才允许重试或删除断点。
+            withContext(NonCancellable + Dispatchers.IO) { sdkTask?.waitUntilFinished() }
         }
     }
 
+    /**
+     * 在IO线程流式复制对象到调用方输出流，不在内存持有完整文件；取消在下一次读取前生效。
+     * @param profileId 提交时捕获的账号ID；为空时兼容使用当前激活账号。
+     */
     suspend fun download(
         bucket: String,
         key: String,
         output: OutputStream,
         endpoint: String? = null,
+        profileId: String? = null,
         onProgress: (read: Long, total: Long) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.downloadS3Object(bucket, key, output, onProgress = onProgress) }
+        val (client, _) = bucketClient(endpoint, profileId)
         val req = GetObjectRequest(bucket, key)
         val result = client.getObject(req)
         val contentLength = result.contentLength
@@ -186,6 +301,7 @@ class OssService(private val provider: OssClientProvider) {
             val buffer = ByteArray(64 * 1024)
             var total = 0L
             while (true) {
+                currentCoroutineContext().ensureActive()
                 val n = input.read(buffer)
                 if (n <= 0) break
                 output.write(buffer, 0, n)
@@ -197,16 +313,22 @@ class OssService(private val provider: OssClientProvider) {
         }
     }
 
-    /** 删除单个 object；若是"目录"前缀，则递归删除所有子项。 */
+    /**
+     * 删除单个object或递归目录；串行逐对象操作，部分失败不回滚已经删除的对象。
+     * @param profileId 提交时捕获的账号ID；全部分页和删除沿用同一客户端身份。
+     */
     suspend fun delete(
         bucket: String,
         key: String,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ) = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.deleteS3Object(bucket, key) }
+        val (client, _) = bucketClient(endpoint, profileId)
         if (key.endsWith("/")) {
             var marker: String? = null
             do {
+                currentCoroutineContext().ensureActive()
                 val req = ListObjectsRequest(bucket).apply {
                     prefix = key
                     this.marker = marker
@@ -214,6 +336,7 @@ class OssService(private val provider: OssClientProvider) {
                 }
                 val res = client.listObjects(req)
                 for (s in res.objectSummaries) {
+                    currentCoroutineContext().ensureActive()
                     client.deleteObject(DeleteObjectRequest(bucket, s.key))
                 }
                 marker = if (res.isTruncated) res.nextMarker else null
@@ -227,19 +350,26 @@ class OssService(private val provider: OssClientProvider) {
      * 移动 / 重命名：通过 copy + delete 实现。
      * - 对"目录" key（以 `/` 结尾），递归搬移其下所有对象。
      * - 跨 bucket 暂不支持，目标 bucket 与源 bucket 相同。
+     * - 禁止把目录移入自身子目录；任一copy失败时不能删除该源对象，已完成对象不回滚。
+     * @param profileId 提交时捕获的账号ID；全部复制和删除沿用同一客户端身份。
      */
     suspend fun move(
         bucket: String,
         sourceKey: String,
         destKey: String,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ) = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        if (sourceKey == destKey) return@withContext
+        validateObjectMovePaths(sourceKey, destKey)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.moveS3Object(bucket, sourceKey, destKey) }
+        val (client, _) = bucketClient(endpoint, profileId)
 
         if (sourceKey.endsWith("/")) {
             require(destKey.endsWith("/")) { "目标 key 需以 / 结尾" }
             var marker: String? = null
             do {
+                currentCoroutineContext().ensureActive()
                 val req = ListObjectsRequest(bucket).apply {
                     prefix = sourceKey
                     this.marker = marker
@@ -247,15 +377,16 @@ class OssService(private val provider: OssClientProvider) {
                 }
                 val res = client.listObjects(req)
                 for (s in res.objectSummaries) {
+                    currentCoroutineContext().ensureActive()
                     val rel = s.key.removePrefix(sourceKey)
                     val newKey = destKey + rel
-                    copyOne(bucket, s.key, newKey, endpoint)
+                    copyOne(client, bucket, s.key, newKey)
                     client.deleteObject(DeleteObjectRequest(bucket, s.key))
                 }
                 marker = if (res.isTruncated) res.nextMarker else null
             } while (marker != null)
         } else {
-            copyOne(bucket, sourceKey, destKey, endpoint)
+            copyOne(client, bucket, sourceKey, destKey)
             client.deleteObject(DeleteObjectRequest(bucket, sourceKey))
         }
     }
@@ -266,6 +397,7 @@ class OssService(private val provider: OssClientProvider) {
         key: String,
         endpoint: String? = null
     ): Boolean = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint)?.let { return@withContext it.s3ObjectExists(bucket, key) }
         if (key.isBlank()) return@withContext false
         val (client, _) = bucketClient(endpoint)
         runCatching { client.doesObjectExist(bucket, key) }.getOrDefault(false)
@@ -274,14 +406,17 @@ class OssService(private val provider: OssClientProvider) {
     /**
      * 将对象下载到内存（byte 数组），用于文本/JSON/XML 等小文件预览。
      * 若对象大小超过 [maxBytes] 或未知但读取时超限，则抛 [IllegalStateException]。
+     * @param profileId 预览开始时捕获的账号ID；为空兼容当前激活账号。
      */
     suspend fun downloadBytes(
         bucket: String,
         key: String,
         maxBytes: Long,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ): ByteArray = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.downloadS3Bytes(bucket, key, maxBytes) }
+        val (client, _) = bucketClient(endpoint, profileId)
         val result = client.getObject(GetObjectRequest(bucket, key))
         val contentLength = result.contentLength
         if (contentLength in 1..Long.MAX_VALUE && contentLength > maxBytes) {
@@ -295,6 +430,7 @@ class OssService(private val provider: OssClientProvider) {
             val out = java.io.ByteArrayOutputStream()
             var total = 0L
             while (true) {
+                currentCoroutineContext().ensureActive()
                 val n = input.read(buf)
                 if (n <= 0) break
                 total += n
@@ -312,15 +448,18 @@ class OssService(private val provider: OssClientProvider) {
     /**
      * 将对象下载到本地文件（用于 PDF 等需要随机读取的预览场景）。
      * 成功返回目标 [File]。失败时会清理不完整文件。
+     * @param profileId 预览开始时捕获的账号ID；为空兼容当前激活账号。
      */
     suspend fun downloadToFile(
         bucket: String,
         key: String,
         target: java.io.File,
         endpoint: String? = null,
+        profileId: String? = null,
         onProgress: (read: Long, total: Long) -> Unit = { _, _ -> }
     ): java.io.File = withContext(Dispatchers.IO) {
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.downloadS3File(bucket, key, target, onProgress) }
+        val (client, _) = bucketClient(endpoint, profileId)
         val result = client.getObject(GetObjectRequest(bucket, key))
         val total = result.contentLength
         try {
@@ -329,6 +468,7 @@ class OssService(private val provider: OssClientProvider) {
                     val buf = ByteArray(64 * 1024)
                     var read = 0L
                     while (true) {
+                        currentCoroutineContext().ensureActive()
                         val n = input.read(buf)
                         if (n <= 0) break
                         output.write(buf, 0, n)
@@ -352,10 +492,12 @@ class OssService(private val provider: OssClientProvider) {
         bucket: String,
         key: String,
         expireSeconds: Long,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ): String = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.presignS3Object(bucket, key, expireSeconds) }
         require(expireSeconds > 0) { "有效期必须为正数" }
-        val (client, _) = bucketClient(endpoint)
+        val (client, _) = bucketClient(endpoint, profileId)
         client.presignConstrainedObjectURL(bucket, key, expireSeconds)
     }
 
@@ -377,6 +519,7 @@ class OssService(private val provider: OssClientProvider) {
         endpoint: String? = null,
         cname: OssCnameInfo? = null
     ): String = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint)?.let { return@withContext it.publicS3ObjectUrl(bucket, key) }
         val (client, _) = bucketClient(endpoint)
         val defaultUrl = client.presignPublicObjectURL(bucket, key)
         if (cname == null) {
@@ -404,6 +547,7 @@ class OssService(private val provider: OssClientProvider) {
         bucket: String,
         endpoint: String? = null
     ): List<OssCnameInfo> = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint)?.let { return@withContext emptyList() }
         val (client, profile) = bucketClient(endpoint)
         val expiresAtSeconds = System.currentTimeMillis() / 1_000L + LIST_CNAME_URL_TTL_SECONDS
         val signedUrl = createListCnameSignedUrl(
@@ -491,10 +635,10 @@ class OssService(private val provider: OssClientProvider) {
         return result
     }
 
+    /** 整个移动操作沿用提交时捕获的客户端，中途切账号也不能改变复制/删除的身份。 */
     @Throws(ClientException::class, ServiceException::class)
-    private fun copyOne(bucket: String, src: String, dst: String, endpoint: String?) {
+    private fun copyOne(client: OSSClient, bucket: String, src: String, dst: String) {
         if (src == dst) return
-        val client = bucketClient(endpoint).first
         val req = CopyObjectRequest(bucket, src, bucket, dst)
         client.copyObject(req)
     }

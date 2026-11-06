@@ -16,19 +16,26 @@
 package io.github.jinlongliao.ossbrowser.ui
 
 import android.app.Activity
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.NavigationBarItemDefaults
+import io.github.jinlongliao.ossbrowser.ui.theme.LocalThemeVisualStyle
+import io.github.jinlongliao.ossbrowser.ui.theme.ThemeBackdrop
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -36,19 +43,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.CachePolicy
-import coil.request.ImageRequest
 import io.github.jinlongliao.ossbrowser.OssBrowserApp
-import io.github.jinlongliao.ossbrowser.BuildConfig
 import io.github.jinlongliao.ossbrowser.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -64,16 +63,9 @@ import io.github.jinlongliao.ossbrowser.ui.settings.PrivacyConsentDialog
 import io.github.jinlongliao.ossbrowser.ui.settings.PrivacyScreen
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsScreen
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsViewModel
-import io.github.jinlongliao.ossbrowser.ui.theme.LocalBrandGradient
-import io.github.jinlongliao.ossbrowser.ui.theme.LocalAppBackground
-import io.github.jinlongliao.ossbrowser.ui.theme.SUMMER_SKY_BACKGROUND_URL
-import io.github.jinlongliao.ossbrowser.ui.web.AliyunWebConsoleScreen
-import io.github.jinlongliao.ossbrowser.data.WebBrowserEngine
-import io.github.jinlongliao.ossbrowser.ui.web.GeckoAliyunWebConsoleScreen
 
 private object Routes {
     const val BROWSER = "browser"
-    const val ALIYUN_WEB = "aliyun_web"
     const val PROFILES = "profiles"
     const val PROFILE_EDIT = "profile_edit?id={id}"
     const val SETTINGS = "settings"
@@ -93,48 +85,30 @@ fun OssBrowserRoot() {
     val profileState by OssBrowserApp.instance.profileRepository.state.collectAsState()
     val context = LocalContext.current
 
-    // 三个一级入口分别承载 AccessKey 直连、阿里云网页登录和本地设置，避免混淆两种认证会话。
+    // 一级入口仅保留 OSS SDK 文件管理和本地设置。
     val showBottomBar = currentRoute == Routes.BROWSER ||
-        currentRoute == Routes.ALIYUN_WEB ||
         currentRoute == Routes.SETTINGS
 
-    val appBackground = LocalAppBackground.current
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .then(if (appBackground != null) Modifier.background(appBackground) else Modifier)
-    ) {
-        if (appBackground != null) {
-            // Coil 默认优先命中内存/磁盘缓存；首次联网成功后，后续启动可直接使用本地副本。
-            val backgroundRequest = remember(context) {
-                ImageRequest.Builder(context)
-                    .data(SUMMER_SKY_BACKGROUND_URL)
-                    .memoryCacheKey("theme_summer_sky_strivy_v1")
-                    .diskCacheKey("theme_summer_sky_strivy_v1")
-                    .memoryCachePolicy(CachePolicy.ENABLED)
-                    .diskCachePolicy(CachePolicy.ENABLED)
-                    .networkCachePolicy(CachePolicy.ENABLED)
-                    .crossfade(true)
-                    .build()
-            }
-            AsyncImage(
-                model = backgroundRequest,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
-        }
+    val visuals = LocalThemeVisualStyle.current
+    val navigationColors = NavigationBarItemDefaults.colors(
+        indicatorColor = if (visuals.accentColors.isEmpty()) MaterialTheme.colorScheme.secondaryContainer
+            else Color.Transparent
+    )
+    Box(Modifier.fillMaxSize()) {
+        ThemeBackdrop()
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = if (appBackground != null) Color.Transparent
-            else MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            containerColor = Color.Transparent,
             bottomBar = {
                 if (showBottomBar) {
                     NavigationBar(
-                        containerColor = if (appBackground != null) MaterialTheme.colorScheme.surface
-                        else NavigationBarDefaults.containerColor
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp
                     ) {
                         NavigationBarItem(
+                            colors = navigationColors,
                             selected = currentRoute == Routes.BROWSER,
                             onClick = {
                                 if (currentRoute != Routes.BROWSER) {
@@ -153,23 +127,7 @@ fun OssBrowserRoot() {
                             label = { Text(stringResource(R.string.nav_files)) }
                         )
                         NavigationBarItem(
-                            selected = currentRoute == Routes.ALIYUN_WEB,
-                            onClick = {
-                                if (currentRoute != Routes.ALIYUN_WEB) {
-                                    navController.navigate(Routes.ALIYUN_WEB) {
-                                        launchSingleTop = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                ThemedNavigationIcon(
-                                    imageVector = Icons.Outlined.Language,
-                                    selected = currentRoute == Routes.ALIYUN_WEB
-                                )
-                            },
-                            label = { Text(stringResource(R.string.nav_aliyun_web)) }
-                        )
-                        NavigationBarItem(
+                            colors = navigationColors,
                             selected = backStack?.destination?.hierarchy?.any {
                                 it.route?.startsWith("settings") == true ||
                                     it.route?.startsWith("profile") == true
@@ -213,27 +171,6 @@ fun OssBrowserRoot() {
                         onEdit = { id -> navController.navigate(Routes.profileEdit(id)) }
                     )
                 }
-                composable(Routes.ALIYUN_WEB) {
-                    when (settings.webBrowserEngine) {
-                        WebBrowserEngine.SYSTEM_WEBVIEW -> AliyunWebConsoleScreen(
-                            settings = settings,
-                            onSaveAccount = settingsVm::setAliyunWebAccount
-                        )
-                        WebBrowserEngine.GECKOVIEW -> {
-                            if (BuildConfig.HAS_GECKOVIEW) {
-                                GeckoAliyunWebConsoleScreen(
-                                    settings = settings,
-                                    onSaveAccount = settingsVm::setAliyunWebAccount
-                                )
-                            } else {
-                                AliyunWebConsoleScreen(
-                                    settings = settings,
-                                    onSaveAccount = settingsVm::setAliyunWebAccount
-                                )
-                            }
-                        }
-                    }
-                }
                 composable(Routes.PROFILE_EDIT) { entry ->
                     val id = entry.arguments?.getString("id")?.takeIf { it.isNotBlank() }
                     ProfileEditScreen(
@@ -276,27 +213,27 @@ fun OssBrowserRoot() {
 }
 
 /**
- * 底部导航图标：默认主题完全沿用 Material 3；Gemini 主题的选中项使用品牌渐变胶囊强调。
+ * 导航图标使用当前选中项的语义颜色，避免在系统指示胶囊上再叠加第二层色块。
  *
  * @param imageVector 导航项图标。
- * @param selected 当前导航项是否选中。
+ * @param selected 是否为当前页面。
  */
 @Composable
 private fun ThemedNavigationIcon(imageVector: ImageVector, selected: Boolean) {
-    val brandGradient = LocalBrandGradient.current
-    val showBrandGradient = selected && brandGradient != null
-    val modifier = if (showBrandGradient) {
-        Modifier
-            .background(requireNotNull(brandGradient), RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    } else {
-        Modifier
-    }
-    Box(modifier = modifier) {
+    val accent = LocalThemeVisualStyle.current.accentColors
+    val useGradient = selected && accent.isNotEmpty()
+    val background = if (useGradient) {
+        Modifier.background(Brush.horizontalGradient(accent), RoundedCornerShape(14.dp))
+    } else Modifier
+    Box(
+        modifier = Modifier.size(width = 64.dp, height = 32.dp).then(background),
+        contentAlignment = Alignment.Center
+    ) {
         Icon(
             imageVector = imageVector,
             contentDescription = null,
-            tint = if (showBrandGradient) Color.White else LocalContentColor.current
+            tint = if (useGradient) Color.White else if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

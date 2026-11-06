@@ -1,5 +1,7 @@
 # Design
 
+> 文档定位：保留的初始设计、需求或旧版英文使用说明。当前 1.0.5 的实现、构建要求与验收边界以[文档索引](文档索引.md)、[中文使用手册](USAGE.zh-CN.md)和[发布记录](1.0.5发布与清理记录.md)为准。
+
 > Language / 语言：**English** · [简体中文](DESIGN.zh-CN.md)
 
 > **App**: OSS Browser for Android  ·  **Author**: [jinlongliao](https://github.com/JinlongLiao/)  ·  **Repo**: <https://github.com/JinlongLiao/alioss4droid>  ·  **License**: [Apache License 2.0](../LICENSE)  ·  **Application ID**: `io.github.jinlongliao.ossbrowser`
@@ -31,7 +33,7 @@
 │                       delete / move / presign                            │
 │ ProfileBackupCodec    AES-256-GCM + PBKDF2-HmacSHA256 for backups        │
 └────────────┬─────────────────────────────────────────────────────────────┘
-             │ com.aliyun.dpa:oss-android-sdk 2.9.13
+             │ com.aliyun.dpa:oss-android-sdk 2.9.21
          Aliyun OSS REST API (HTTPS)
 ```
 

@@ -2,9 +2,27 @@
 
 All notable, user-visible changes to **OSS Browser for Android** are recorded here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions use
-calendar-ish tags since no public release has been cut yet.
+application version numbers; release verification is recorded separately.
 
-## Unreleased (2026-04-24)
+## 1.0.5（2026-11-07）
+
+### 新增
+
+- 阿里云 OSS 与 AWS S3 共用账号和文件操作模块，S3 Region 支持搜索选择及手动区域代码。
+- 多文件后台上传、通知栏进度、持久化任务入口、断点续传、逐任务取消和历史清理。
+- 浏览布局、OSS 地域选择和主题、文件类型图标完善，详见文档索引。
+
+### 修复与升级
+
+- 修复排序设置不即时生效、上传后目录缓存未更新、并发任务进度相互覆盖等问题。
+- 目录扫描、排序、缓存、文件名查询与预览解析移至后台，PDF 按可见页渲染并限制位图预算。
+- OSS Android SDK：2.9.13 → 2.9.21；AWS Kotlin S3 SDK：1.9.28 → 1.9.31。
+- `versionName` 为 `1.0.5`，`versionCode` 从 1 增加到 2。
+- 移除网页控制台与 GeckoView 构建变体，保留文件 HTML 预览。
+
+验证和限制见 [1.0.5 发布与清理记录](docs/1.0.5发布与清理记录.md)；真实 S3 文件未操作。
+
+## 历史开发记录（2026-04-24）
 
 ### Added
 

@@ -24,6 +24,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.jinlongliao.ossbrowser.OssBrowserApp
 import io.github.jinlongliao.ossbrowser.R
 import io.github.jinlongliao.ossbrowser.data.OssProfile
+import io.github.jinlongliao.ossbrowser.data.StorageType
 import io.github.jinlongliao.ossbrowser.data.OssProfileRepository
 import io.github.jinlongliao.ossbrowser.data.OssObjectSortDirection
 import io.github.jinlongliao.ossbrowser.data.OssObjectSortField
@@ -35,8 +36,13 @@ import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.OssPreviewKind
 import io.github.jinlongliao.ossbrowser.oss.OssService
 import io.github.jinlongliao.ossbrowser.oss.isMarkdownFile
+import io.github.jinlongliao.ossbrowser.oss.objectParentPrefix
 import io.github.jinlongliao.ossbrowser.oss.previewKind
+import io.github.jinlongliao.ossbrowser.oss.pdfObjectPreviewCacheName
+import io.github.jinlongliao.ossbrowser.oss.canReusePdfObjectPreviewCache
 import io.github.jinlongliao.ossbrowser.oss.sortOssObjectItems
+import io.github.jinlongliao.ossbrowser.oss.loadSortedObjectDirectory
+import io.github.jinlongliao.ossbrowser.oss.requiresCompleteObjectDirectory
 import io.github.jinlongliao.ossbrowser.util.DocxText
 import io.github.jinlongliao.ossbrowser.util.DelimitedTextPreviewParser
 import io.github.jinlongliao.ossbrowser.util.OoxmlPreviewParser
@@ -44,17 +50,35 @@ import io.github.jinlongliao.ossbrowser.util.PresentationSlidePreview
 import io.github.jinlongliao.ossbrowser.util.SpreadsheetSheetPreview
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import java.io.File
 import java.io.OutputStream
+import java.util.UUID
+import io.github.jinlongliao.ossbrowser.upload.UploadService
+import io.github.jinlongliao.ossbrowser.upload.UploadTask
+import io.github.jinlongliao.ossbrowser.upload.UploadRepository
+import io.github.jinlongliao.ossbrowser.upload.UploadStatus
+import io.github.jinlongliao.ossbrowser.util.FileUtils
 
 class BrowserViewModel(
     private val repository: OssProfileRepository,
     private val service: OssService,
     private val settingsRepo: SettingsRepository,
-    private val listCache: OssListCache
+    private val listCache: OssListCache,
+    private val uploadRepository: UploadRepository
 ) : ViewModel() {
 
     private val pageSize: Int get() = settingsRepo.settings.value.pageSize
@@ -82,6 +106,13 @@ class BrowserViewModel(
     /** 最近一次触发预览的 File；重试 / 超限后的「下载」「生成链接」按钮都依赖它。 */
     private var lastPreviewItem: OssObjectItem.File? = null
 
+    /** 关闭、重开或切换账号时废弃旧预览；同步 OSS 请求返回后也不能重新弹出旧内容。 */
+    @Volatile
+    private var previewGeneration = 0L
+
+    /** 可取消的预览解析任务；耗时文档转换在 Default 调度器执行。 */
+    private var previewJob: Job? = null
+
     /** 供 UI 读取当前预览对应的源文件，用于触发 SAF 下载 / 生成链接弹窗等复用流程。 */
     fun currentPreviewItem(): OssObjectItem.File? = lastPreviewItem
 
@@ -93,15 +124,36 @@ class BrowserViewModel(
      * 连接会抛 "Connections closed" / `ClientException`，导致看起来一直卡在加载中。
      * 因此：旧请求允许跑完，但通过比对 [refreshSeq] 决定是否应用结果到 UI。
      */
+    @Volatile
     private var refreshSeq: Long = 0L
     private var loadMoreSeq: Long = 0L
+
+    /** 固定短窗口合并连续上传的刷新，避免每个小文件完成都重新扫描完整目录。 */
+    private var uploadRefreshJob: Job? = null
+
+    /** 合并窗口中最近一次匹配的可见目录；导航后不能刷新用户已经离开的页面。 */
+    private var uploadRefreshTarget: Triple<String, String, String>? = null
+
+    /** 当前列表是否覆盖完整目录；部分缓存不能用于全局时间排序和名称倒序。 */
+    private var currentDirectoryComplete = false
+
+    /** 已应用到当前列表的排序，防止同步设置更新与 Flow 通知重复触发网络扫描。 */
+    private var appliedObjectSort = settingsRepo.settings.value.let {
+        it.ossObjectSortField to it.ossObjectSortDirection
+    }
+
+    /** 仅消费本 ViewModel 存活期间新完成的上传，避免历史成功记录导致每次进入页面刷新。 */
+    private var completedUploadIds = emptySet<String>()
 
     init {
         viewModelScope.launch {
             repository.state.collect { s ->
                 val active = s.active
                 val current = _state.value
-                if (active?.id != current.activeProfile?.id) {
+                if (active != current.activeProfile) {
+                    previewGeneration++
+                    previewJob?.cancel()
+                    lastPreviewItem = null
                     // 切换 profile 时：若配置了默认 bucket，则直接定位；否则先展示该账号下所有 bucket。
                     // 默认 bucket 场景下 endpoint 未知，使用 profile.endpoint；
                     // 跨 region 的 bucket 会在用户从 bucket 列表点击时，使用 extranetEndpoint 路由到对应区域。
@@ -113,11 +165,56 @@ class BrowserViewModel(
                         items = emptyList(),
                         buckets = emptyList(),
                         errorMessage = null,
+                        previewState = null,
                         task = null
                     )
                     if (active != null) loadCurrent(forceNetwork = false)
                 }
             }
+        }
+        viewModelScope.launch {
+            settingsRepo.settings.map { it.ossObjectSortField to it.ossObjectSortDirection }
+                .distinctUntilChanged().collect { (field, direction) ->
+                    applyObjectSort(field, direction)
+                }
+        }
+        viewModelScope.launch {
+            uploadRepository.awaitLoaded()
+            completedUploadIds = uploadRepository.initialCompletedUploadIds
+            uploadRepository.tasks.map { tasks -> tasks.filter { it.status == UploadStatus.SUCCEEDED } }
+                .distinctUntilChanged()
+                .flowOn(Dispatchers.Default).collect { completed ->
+                    val newlyCompleted = completed.filter { it.id !in completedUploadIds }
+                    completedUploadIds = completed.map { it.id }.toSet()
+                    val current = _state.value
+                    if (newlyCompleted.any {
+                            it.profileId == current.activeProfile?.id && it.bucket == current.currentBucket &&
+                                it.prefix == current.prefix
+                        }) {
+                        scheduleUploadedDirectoryRefresh()
+                    }
+                }
+        }
+    }
+
+    /**
+     * 在首个完成事件后固定等待 250ms，合并期间的后续完成事件不会延长等待。
+     * 立即废弃正在读取的旧列表；窗口结束只刷新仍然可见的目标目录。
+     */
+    private fun scheduleUploadedDirectoryRefresh() {
+        val current = _state.value
+        val profileId = current.activeProfile?.id ?: return
+        val bucket = current.currentBucket ?: return
+        uploadRefreshTarget = Triple(profileId, bucket, current.prefix)
+        refreshSeq++
+        loadMoreSeq++
+        if (uploadRefreshJob?.isActive == true) return
+        uploadRefreshJob = viewModelScope.launch {
+            delay(250)
+            val target = uploadRefreshTarget
+            uploadRefreshTarget = null
+            val latest = _state.value
+            if (target == Triple(latest.activeProfile?.id, latest.currentBucket, latest.prefix)) refresh()
         }
     }
 
@@ -127,11 +224,6 @@ class BrowserViewModel(
      * 适用于：顶部刷新按钮、写操作（上传 / 删除 / 移动 / 新建）后的自动刷新。
      */
     fun refresh() {
-        val s = _state.value
-        val profile = s.activeProfile ?: return
-        val bucket = s.currentBucket
-        if (bucket == null) listCache.invalidateBuckets(profile.id)
-        else listCache.invalidateList(profile.id, bucket, s.prefix)
         loadCurrent(forceNetwork = true)
     }
 
@@ -144,85 +236,108 @@ class BrowserViewModel(
      * 因此多数日常点击都能秒响应。"刷新按钮"与写操作后走 `true`。
      */
     private fun loadCurrent(forceNetwork: Boolean) {
-        val s = _state.value
-        val profile = s.activeProfile ?: return
+        val snapshot = _state.value
+        val profile = snapshot.activeProfile ?: return
         val mySeq = ++refreshSeq
-        // loadMore 的旧 seq 也一并失效（快速切目录时，避免上一目录的分页结果污染当前目录）
         loadMoreSeq++
-
-        val bucket = s.currentBucket
-        val prefix = s.prefix
-        val endpoint = s.currentBucketEndpoint
-
-        // 1) 命中缓存 → 直接应用，体验上无"加载"闪烁
-        if (!forceNetwork) {
-            if (bucket == null) {
-                listCache.readBuckets(profile.id)?.let { cached ->
-                    _state.value = _state.value.copy(
-                        loading = false,
-                        errorMessage = null,
-                        buckets = cached,
-                        items = emptyList(),
-                        nextMarker = null,
-                        loadingMore = false
-                    )
-                    return
-                }
-            } else {
-                listCache.readList(profile.id, bucket, prefix)?.let { cached ->
-                    _state.value = _state.value.copy(
-                        loading = false,
-                        errorMessage = null,
-                        items = sortObjects(cached.items),
-                        nextMarker = cached.nextMarker,
-                        loadingMore = false
-                    )
-                    return
-                }
-            }
-        }
-
-        // 2) 走网络：先切 loading 态
-        _state.value = _state.value.copy(
+        val bucket = snapshot.currentBucket
+        val prefix = snapshot.prefix
+        val endpoint = snapshot.currentBucketEndpoint
+        val sort = settingsRepo.settings.value
+        val completeSort = requiresCompleteObjectDirectory(sort.ossObjectSortField, sort.ossObjectSortDirection)
+        currentDirectoryComplete = false
+        _state.value = snapshot.copy(
             loading = true,
             errorMessage = null,
             items = emptyList(),
             nextMarker = null,
             loadingMore = false
         )
-
         loadJob = viewModelScope.launch {
             try {
-                if (bucket == null) {
-                    val list = service.listBuckets()
-                    if (mySeq != refreshSeq) return@launch
-                    listCache.writeBuckets(profile.id, list)
-                    _state.value = _state.value.copy(loading = false, buckets = list)
-                } else {
-                    val page = service.list(
-                        bucket = bucket,
-                        prefix = prefix,
-                        marker = null,
-                        maxKeys = pageSize,
-                        endpoint = endpoint
-                    )
-                    if (mySeq != refreshSeq) return@launch
-                    listCache.writeList(profile.id, bucket, prefix, page.items, page.nextMarker)
-                    _state.value = _state.value.copy(
-                        loading = false,
-                        items = sortObjects(page.items),
-                        nextMarker = page.nextMarker
-                    )
+                // 主动刷新涉及磁盘删除/锁等待，同样放到IO；递增UI代次已先阻止旧响应发布。
+                if (forceNetwork) withContext(Dispatchers.IO) {
+                    if (bucket == null) listCache.invalidateBuckets(profile.id)
+                    else listCache.invalidateList(profile.id, bucket, prefix)
                 }
-            } catch (e: CancellationException) {
-                // ViewModel 销毁场景 —— 正常传播
-                throw e
-            } catch (e: Throwable) {
-                // 本次请求已过期（用户切到别的目录）则静默丢弃
                 if (mySeq != refreshSeq) return@launch
+                if (bucket == null) {
+                    // JSON 反序列化、磁盘读写和缓存 DTO 转换不能阻塞主线程。
+                    val cached = if (forceNetwork) null else withContext(Dispatchers.IO) {
+                        listCache.readBuckets(profile.id)
+                    }
+                    if (mySeq != refreshSeq) return@launch
+                    if (cached != null) {
+                        _state.value = _state.value.copy(loading = false, buckets = cached)
+                        return@launch
+                    }
+                    val buckets = service.listBuckets()
+                    if (mySeq != refreshSeq) return@launch
+                    withContext(Dispatchers.IO) { listCache.writeBuckets(profile.id, buckets) }
+                    if (mySeq != refreshSeq) return@launch
+                    _state.value = _state.value.copy(loading = false, buckets = buckets)
+                    return@launch
+                }
+                val generation = withContext(Dispatchers.IO) {
+                    listCache.listGeneration(profile.id, bucket, prefix)
+                }
+                val cached = if (forceNetwork) null else withContext(Dispatchers.IO) {
+                    listCache.readList(profile.id, bucket, prefix)?.takeIf { !completeSort || it.nextMarker == null }
+                }
+                if (mySeq != refreshSeq) return@launch
+                if (cached != null) {
+                    val sorted = withContext(Dispatchers.Default) {
+                        sortOssObjectItems(cached.items, sort.ossObjectSortField, sort.ossObjectSortDirection)
+                    }
+                    if (mySeq != refreshSeq) return@launch
+                    val currentGeneration = withContext(Dispatchers.IO) {
+                        listCache.listGeneration(profile.id, bucket, prefix)
+                    }
+                    if (mySeq != refreshSeq) return@launch
+                    if (generation != currentGeneration) {
+                        loadCurrent(forceNetwork = true)
+                        return@launch
+                    }
+                    currentDirectoryComplete = cached.nextMarker == null
+                    _state.value = _state.value.copy(
+                        loading = false, items = sorted, nextMarker = cached.nextMarker
+                    )
+                    return@launch
+                }
+                val page = withContext(Dispatchers.Default) {
+                    service.withObjectDirectoryListing(bucket, prefix, endpoint, profile.id) { fetchPage ->
+                        loadSortedObjectDirectory(
+                            field = sort.ossObjectSortField,
+                            direction = sort.ossObjectSortDirection,
+                            pageSize = pageSize,
+                            ensureCurrent = {
+                                if (mySeq != refreshSeq) throw CancellationException("目录请求已过期")
+                            },
+                            fetchPage = fetchPage
+                        )
+                    }
+                }
+                if (mySeq != refreshSeq) return@launch
+                val persisted = withContext(Dispatchers.IO) {
+                    listCache.writeList(profile.id, bucket, prefix, page.items, page.nextMarker, generation)
+                }
+                if (mySeq != refreshSeq) return@launch
+                if (!persisted) {
+                    loadCurrent(forceNetwork = true)
+                    return@launch
+                }
+                currentDirectoryComplete = page.nextMarker == null
+                // 加载器已经完成排序，不在主线程把完整目录再排序一次。
                 _state.value = _state.value.copy(
-                    loading = false,
-                    errorMessage = e.localizedMessage ?: e.toString()
+                    loading = false, items = page.items, nextMarker = page.nextMarker
+                )
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Throwable) {
+                if (mySeq != refreshSeq) return@launch
+                Log.e(TAG, "目录加载失败 profile=${profile.id}, bucket=$bucket, prefix=$prefix", exception)
+                _state.value = _state.value.copy(
+                    loading = false, errorMessage = exception.localizedMessage ?: exception.toString()
                 )
             }
         }
@@ -241,25 +356,36 @@ class BrowserViewModel(
 
         viewModelScope.launch {
             try {
-                val page = service.list(
-                    bucket = bucket,
-                    prefix = s.prefix,
-                    marker = marker,
-                    maxKeys = pageSize,
-                    endpoint = s.currentBucketEndpoint
-                )
+                val generation = withContext(Dispatchers.IO) {
+                    listCache.listGeneration(profile.id, bucket, s.prefix)
+                }
+                if (mySeq != loadMoreSeq || parentSeq != refreshSeq) return@launch
+                val page = service.withObjectDirectoryListing(
+                    bucket, s.prefix, s.currentBucketEndpoint, profile.id
+                ) { fetchPage -> fetchPage(marker, pageSize) }
                 // 用户若在期间做了首屏刷新 / 切目录，本次结果就不再适用
                 if (mySeq != loadMoreSeq || parentSeq != refreshSeq) return@launch
 
-                val existing = _state.value.items.map { it.key }.toHashSet()
-                val merged = sortObjects(_state.value.items + page.items.filter { it.key !in existing })
+                val currentItems = _state.value.items
+                val merged = withContext(Dispatchers.Default) {
+                    val existing = currentItems.map { it.key }.toHashSet()
+                    sortObjects(currentItems + page.items.filter { it.key !in existing })
+                }
+                if (mySeq != loadMoreSeq || parentSeq != refreshSeq) return@launch
+                val persisted = withContext(Dispatchers.IO) {
+                    listCache.writeList(profile.id, bucket, s.prefix, merged, page.nextMarker, generation)
+                }
+                if (mySeq != loadMoreSeq || parentSeq != refreshSeq) return@launch
+                if (!persisted) {
+                    loadCurrent(forceNetwork = true)
+                    return@launch
+                }
+                currentDirectoryComplete = page.nextMarker == null
                 _state.value = _state.value.copy(
                     items = merged,
                     nextMarker = page.nextMarker,
                     loadingMore = false
                 )
-                // 把"已加载部分"写回缓存：下次进入该目录可直接看到这些项，并继续从当前 nextMarker 向后分页。
-                listCache.writeList(profile.id, bucket, s.prefix, merged, page.nextMarker)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -273,10 +399,7 @@ class BrowserViewModel(
     }
 
     /**
-     * 更新并持久化 OSS 文件排序偏好，然后立即重排当前目录中已加载的对象。
-     *
-     * 排序只改变本地展示顺序，不重新请求 OSS，也不修改缓存中的对象内容。
-     *
+     * 同步保存排序偏好并立即应用。完整目录可直接重排；部分列表的时间/倒序排序必须补全目录。
      * @param field 文件排序字段。
      * @param direction 排序方向。
      */
@@ -284,7 +407,30 @@ class BrowserViewModel(
         settingsRepo.update {
             it.copy(ossObjectSortField = field, ossObjectSortDirection = direction)
         }
-        _state.value = _state.value.copy(items = sortObjects(_state.value.items))
+        applyObjectSort(field, direction)
+    }
+
+    /** 应用设置页或当前页发起的排序切换；加载中的旧扫描通过刷新代次失效。 */
+    private fun applyObjectSort(field: OssObjectSortField, direction: OssObjectSortDirection) {
+        val requested = field to direction
+        if (appliedObjectSort == requested) return
+        appliedObjectSort = requested
+        val current = _state.value
+        if (current.currentBucket == null) return
+        if (current.loading || current.errorMessage != null ||
+            (requiresCompleteObjectDirectory(field, direction) && !currentDirectoryComplete)
+        ) {
+            loadCurrent(forceNetwork = false)
+        } else {
+            val generation = refreshSeq
+            viewModelScope.launch {
+                val sorted = withContext(Dispatchers.Default) {
+                    sortOssObjectItems(current.items, field, direction)
+                }
+                if (generation != refreshSeq || appliedObjectSort != requested) return@launch
+                _state.value = _state.value.copy(items = sorted)
+            }
+        }
     }
 
     fun selectBucket(name: String, endpoint: String? = null) {
@@ -406,45 +552,51 @@ class BrowserViewModel(
      * 只是让"正在飞行的结果"被视为过期（seq 失效）并把 UI 置回可操作状态。
      */
     fun cancelLoading() {
+        uploadRefreshJob?.cancel()
+        uploadRefreshTarget = null
         refreshSeq++
         loadMoreSeq++
         _state.value = _state.value.copy(loading = false, loadingMore = false)
     }
 
+    /**
+     * 主线程只捕获账号、目录和URI，立即交给前台服务；真实名称由每任务IO准备阶段解析。
+     * 避免云文档ContentProvider.query阻塞Main，也不把FGS启动推迟到用户退后台以后。
+     */
     fun upload(context: Context, uri: Uri) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
-        viewModelScope.launch {
-            _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_uploading), 0, 0))
-            runCatching {
-                service.upload(
-                    context = context,
-                    bucket = bucket,
-                    prefix = _state.value.prefix,
-                    uri = uri,
-                    endpoint = endpoint
-                ) { sent, total ->
-                    _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_uploading), sent, total))
-                }
-            }.onSuccess {
-                _state.value = _state.value.copy(task = TaskState.Done(str(R.string.task_upload_done, it)))
-                refresh()
-            }.onFailure { e ->
-                if (e is CancellationException) throw e
-                _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_upload_failed, e.localizedMessage ?: e.toString())))
-            }
-        }
+        val current = _state.value
+        val bucket = current.currentBucket ?: return
+        val profile = current.activeProfile ?: return
+        UploadService.enqueueUploadTask(context.applicationContext, UploadTask(
+            id = UUID.randomUUID().toString(),
+            profileId = profile.id,
+            bucket = bucket,
+            prefix = current.prefix,
+            uri = uri.toString(),
+            name = "unnamed_${System.currentTimeMillis()}",
+            resolveDisplayName = true,
+            endpoint = current.currentBucketEndpoint ?: profile.endpoint,
+            storageType = profile.storageType,
+            s3Region = profile.region,
+            s3ForcePathStyle = profile.forcePathStyle
+        ))
     }
 
     fun download(key: String, output: OutputStream, displayName: String) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val profileId = snapshot.activeProfile?.id ?: return
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
         viewModelScope.launch {
             _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_downloading), 0, 0))
             runCatching {
-                output.use { os ->
-                    service.download(bucket, key, os, endpoint = endpoint) { read, total ->
-                        _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_downloading), read, total))
+                withContext(Dispatchers.IO) {
+                    output.use { os ->
+                        service.download(bucket, key, os, endpoint = endpoint, profileId = profileId) { read, total ->
+                            _state.value = _state.value.copy(
+                                task = TaskState.Progress(str(R.string.task_downloading), read, total)
+                            )
+                        }
                     }
                 }
             }.onSuccess {
@@ -457,16 +609,19 @@ class BrowserViewModel(
     }
 
     fun delete(key: String) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val profileId = snapshot.activeProfile?.id ?: return
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
         viewModelScope.launch {
             _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_deleting), 0, 0))
-            runCatching { service.delete(bucket, key, endpoint = endpoint) }
+            runCatching { service.delete(bucket, key, endpoint = endpoint, profileId = profileId) }
                 .onSuccess {
                     _state.value = _state.value.copy(task = TaskState.Done(str(R.string.task_delete_done, key)))
-                    refresh()
+                    refreshChangedObjectDirectories(profileId, bucket, setOf(objectParentPrefix(key)), key.endsWith("/"))
                 }
                 .onFailure { e ->
+                    refreshChangedObjectDirectories(profileId, bucket, setOf(objectParentPrefix(key)), key.endsWith("/"))
                     if (e is CancellationException) throw e
                     _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_delete_failed, e.localizedMessage ?: e.toString())))
                 }
@@ -474,16 +629,19 @@ class BrowserViewModel(
     }
 
     fun mkdir(name: String) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val profileId = snapshot.activeProfile?.id ?: return
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
         if (name.isBlank()) return
         viewModelScope.launch {
-            runCatching { service.mkdir(bucket, _state.value.prefix, name, endpoint = endpoint) }
+            runCatching { service.mkdir(bucket, snapshot.prefix, name, endpoint = endpoint, profileId = profileId) }
                 .onSuccess {
                     _state.value = _state.value.copy(task = TaskState.Done(str(R.string.task_mkdir_done, it)))
-                    refresh()
+                    refreshChangedObjectDirectories(profileId, bucket, setOf(snapshot.prefix))
                 }
                 .onFailure { e ->
+                    refreshChangedObjectDirectories(profileId, bucket, setOf(snapshot.prefix))
                     if (e is CancellationException) throw e
                     _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_mkdir_failed, e.localizedMessage ?: e.toString())))
                 }
@@ -502,13 +660,17 @@ class BrowserViewModel(
      * snackbar 后丢失上下文。
      */
     fun preview(item: OssObjectItem.File) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val profile = snapshot.activeProfile ?: return
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
+        val myGeneration = ++previewGeneration
+        previewJob?.cancel()
         val kind = item.previewKind()
         lastPreviewItem = item
         if (kind == OssPreviewKind.UNSUPPORTED) {
             _state.value = _state.value.copy(
-                task = TaskState.Failed(str(R.string.task_preview_unsupported))
+                task = TaskState.Failed(str(R.string.task_preview_unsupported)), previewState = null
             )
             return
         }
@@ -529,7 +691,7 @@ class BrowserViewModel(
             )
             return
         }
-        viewModelScope.launch {
+        previewJob = viewModelScope.launch {
             _state.value = _state.value.copy(
                 previewState = PreviewState.Loading(
                     key = item.key,
@@ -539,147 +701,168 @@ class BrowserViewModel(
                 )
             )
             runCatching {
-                when (kind) {
-                    OssPreviewKind.TEXT -> {
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        PreviewState.Text(
-                            key = item.key,
-                            name = item.displayName,
-                            content = bytes.toString(Charsets.UTF_8),
-                            isMarkdown = item.isMarkdownFile()
-                        )
-                    }
-                    OssPreviewKind.HTML -> {
-                        // HTML 首次只下载源码；是否允许脚本和外部资源由预览界面的显式开关控制。
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        PreviewState.Html(
-                            key = item.key,
-                            name = item.displayName,
-                            content = bytes.toString(Charsets.UTF_8)
-                        )
-                    }
-                    OssPreviewKind.DOCX -> {
-                        // docx 是 ZIP；XML 解析后只需保留纯文本段落，所以复用文本预览上限即可。
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        val paragraphs = DocxText.extractParagraphs(bytes)
-                            ?: throw IllegalStateException(str(R.string.preview_docx_failed))
-                        PreviewState.Docx(
-                            key = item.key,
-                            name = item.displayName,
-                            paragraphs = paragraphs
-                        )
-                    }
-                    OssPreviewKind.XLSX -> {
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        val sheets = OoxmlPreviewParser.parseSpreadsheet(bytes)
-                            ?: throw IllegalStateException(str(R.string.preview_xlsx_failed))
-                        PreviewState.Spreadsheet(item.key, item.displayName, sheets)
-                    }
-                    OssPreviewKind.PPTX -> {
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        val slides = OoxmlPreviewParser.parsePresentation(bytes)
-                            ?: throw IllegalStateException(str(R.string.preview_pptx_failed))
-                        PreviewState.Presentation(item.key, item.displayName, slides)
-                    }
-                    OssPreviewKind.DELIMITED_TEXT -> {
-                        val bytes = service.downloadBytes(
-                            bucket = bucket,
-                            key = item.key,
-                            maxBytes = textPreviewMax,
-                            endpoint = endpoint
-                        )
-                        val delimiter = if (item.displayName.endsWith(".tsv", ignoreCase = true)) '\t' else ','
-                        val rows = DelimitedTextPreviewParser.parseDelimitedText(
-                            bytes.toString(Charsets.UTF_8),
-                            delimiter
-                        )
-                        PreviewState.Spreadsheet(
-                            item.key,
-                            item.displayName,
-                            listOf(SpreadsheetSheetPreview(item.displayName, rows))
-                        )
-                    }
-                    OssPreviewKind.IMAGE,
-                    OssPreviewKind.AUDIO,
-                    OssPreviewKind.VIDEO -> {
-                        val url = service.presignUrl(
-                            bucket = bucket,
-                            key = item.key,
-                            expireSeconds = 3600L,
-                            endpoint = endpoint
-                        )
-                        when (kind) {
-                            OssPreviewKind.IMAGE ->
-                                PreviewState.Image(item.key, item.displayName, url)
-                            OssPreviewKind.AUDIO ->
-                                PreviewState.Media(item.key, item.displayName, url, video = false)
-                            else ->
-                                PreviewState.Media(item.key, item.displayName, url, video = true)
-                        }
-                    }
-                    OssPreviewKind.PDF -> {
-                        val app = OssBrowserApp.instance
-                        // 缓存文件名用 key 的 hash 避免冲突 / 非法字符
-                        val cacheName = "preview_${item.key.hashCode().toUInt()}_${item.displayName}"
-                        val target = java.io.File(app.cacheDir, "pdf/$cacheName")
-                        target.parentFile?.mkdirs()
-                        if (!target.exists() || target.length() == 0L) {
-                            service.downloadToFile(
+                withContext(Dispatchers.Default) {
+                    when (kind) {
+                        OssPreviewKind.TEXT -> {
+                            val bytes = service.downloadBytes(
                                 bucket = bucket,
                                 key = item.key,
-                                target = target,
+                                maxBytes = textPreviewMax,
                                 endpoint = endpoint,
-                                onProgress = { read, total ->
-                                    // 只在当前预览仍指向该文件时回写进度，避免用户快速切换时错乱
-                                    val cur = _state.value.previewState
-                                    if (cur is PreviewState.Loading && cur.key == item.key) {
-                                        _state.value = _state.value.copy(
-                                            previewState = cur.copy(
-                                                totalBytes = if (total > 0) total else cur.totalBytes,
-                                                downloadedBytes = read
-                                            )
-                                        )
-                                    }
-                                }
+                                profileId = profile.id
+                            )
+                            PreviewState.Text(
+                                key = item.key,
+                                name = item.displayName,
+                                content = bytes.toString(Charsets.UTF_8),
+                                isMarkdown = item.isMarkdownFile()
                             )
                         }
-                        PreviewState.Pdf(
-                            key = item.key,
-                            name = item.displayName,
-                            filePath = target.absolutePath
-                        )
+                        OssPreviewKind.HTML -> {
+                            // HTML 首次只下载源码；是否允许脚本和外部资源由预览界面的显式开关控制。
+                            val bytes = service.downloadBytes(
+                                bucket = bucket,
+                                key = item.key,
+                                maxBytes = textPreviewMax,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            PreviewState.Html(
+                                key = item.key,
+                                name = item.displayName,
+                                content = bytes.toString(Charsets.UTF_8)
+                            )
+                        }
+                        OssPreviewKind.DOCX -> {
+                            // docx 是 ZIP；XML 解析后只需保留纯文本段落，所以复用文本预览上限即可。
+                            val bytes = service.downloadBytes(
+                                bucket = bucket,
+                                key = item.key,
+                                maxBytes = textPreviewMax,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            val paragraphs = DocxText.extractParagraphs(bytes)
+                                ?: throw IllegalStateException(str(R.string.preview_docx_failed))
+                            PreviewState.Docx(
+                                key = item.key,
+                                name = item.displayName,
+                                paragraphs = paragraphs
+                            )
+                        }
+                        OssPreviewKind.XLSX -> {
+                            val bytes = service.downloadBytes(
+                                bucket = bucket,
+                                key = item.key,
+                                maxBytes = textPreviewMax,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            val sheets = OoxmlPreviewParser.parseSpreadsheet(bytes)
+                                ?: throw IllegalStateException(str(R.string.preview_xlsx_failed))
+                            PreviewState.Spreadsheet(item.key, item.displayName, sheets)
+                        }
+                        OssPreviewKind.PPTX -> {
+                            val bytes = service.downloadBytes(
+                                bucket = bucket,
+                                key = item.key,
+                                maxBytes = textPreviewMax,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            val slides = OoxmlPreviewParser.parsePresentation(bytes)
+                                ?: throw IllegalStateException(str(R.string.preview_pptx_failed))
+                            PreviewState.Presentation(item.key, item.displayName, slides)
+                        }
+                        OssPreviewKind.DELIMITED_TEXT -> {
+                            val bytes = service.downloadBytes(
+                                bucket = bucket,
+                                key = item.key,
+                                maxBytes = textPreviewMax,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            val delimiter = if (item.displayName.endsWith(".tsv", ignoreCase = true)) '\t' else ','
+                            val rows = DelimitedTextPreviewParser.parseDelimitedText(
+                                bytes.toString(Charsets.UTF_8),
+                                delimiter
+                            )
+                            PreviewState.Spreadsheet(
+                                item.key,
+                                item.displayName,
+                                listOf(SpreadsheetSheetPreview(item.displayName, rows))
+                            )
+                        }
+                        OssPreviewKind.IMAGE,
+                        OssPreviewKind.AUDIO,
+                        OssPreviewKind.VIDEO -> {
+                            val url = service.presignUrl(
+                                bucket = bucket,
+                                key = item.key,
+                                expireSeconds = 3600L,
+                                endpoint = endpoint,
+                                profileId = profile.id
+                            )
+                            when (kind) {
+                                OssPreviewKind.IMAGE ->
+                                    PreviewState.Image(item.key, item.displayName, url)
+                                OssPreviewKind.AUDIO ->
+                                    PreviewState.Media(item.key, item.displayName, url, video = false)
+                                else ->
+                                    PreviewState.Media(item.key, item.displayName, url, video = true)
+                            }
+                        }
+                        OssPreviewKind.PDF -> withContext(Dispatchers.IO) {
+                            val app = OssBrowserApp.instance
+                            val cacheName = pdfObjectPreviewCacheName(profile.id, bucket, item)
+                            val target = File(app.cacheDir, "pdf/$cacheName")
+                            target.parentFile?.mkdirs()
+                            if (!canReusePdfObjectPreviewCache(item, target.length())) {
+                                // 每次预览使用独立半成品；旧请求即使晚返回也不能被新预览当成完整缓存。
+                                val partial = File(target.parentFile, "$cacheName.$myGeneration.part")
+                                try {
+                                    service.downloadToFile(
+                                        bucket = bucket,
+                                        key = item.key,
+                                        target = partial,
+                                        endpoint = endpoint,
+                                        profileId = profile.id,
+                                        onProgress = { read, total ->
+                                            _state.update { current ->
+                                                val loading = current.previewState
+                                                if (myGeneration == previewGeneration &&
+                                                    loading is PreviewState.Loading && loading.key == item.key
+                                                ) {
+                                                    current.copy(previewState = loading.copy(
+                                                        totalBytes = if (total > 0) total else loading.totalBytes,
+                                                        downloadedBytes = read
+                                                    ))
+                                                } else current
+                                            }
+                                        }
+                                    )
+                                    currentCoroutineContext().ensureActive()
+                                    if (myGeneration != previewGeneration) throw CancellationException("预览已过期")
+                                    check(partial.renameTo(target)) { "无法保存完整 PDF 缓存" }
+                                } finally {
+                                    partial.delete()
+                                }
+                            }
+                            PreviewState.Pdf(
+                                key = item.key,
+                                name = item.displayName,
+                                filePath = target.absolutePath
+                            )
+                        }
+                        else -> null
                     }
-                    else -> null
                 }
             }.onSuccess { st ->
+                if (myGeneration != previewGeneration) return@onSuccess
                 if (st != null) _state.value = _state.value.copy(previewState = st)
             }.onFailure { e ->
                 if (e is CancellationException) throw e
+                if (myGeneration != previewGeneration) return@onFailure
                 Log.e(
                     TAG,
                     "Preview failed: stage=local-preview, bucket=$bucket, key=${item.key}, " +
@@ -704,9 +887,12 @@ class BrowserViewModel(
         lastPreviewItem?.let { preview(it) }
     }
 
+    /** 关闭时先废弃代次，再取消下载/解析，旧结果不能重新打开弹窗。 */
     fun closePreview() {
-        _state.value = _state.value.copy(previewState = null)
+        previewGeneration++
+        previewJob?.cancel()
         lastPreviewItem = null
+        _state.value = _state.value.copy(previewState = null)
     }
 
     /**
@@ -719,6 +905,11 @@ class BrowserViewModel(
         val current = _state.value
         val bucket = current.currentBucket ?: return
         val endpoint = current.currentBucketEndpoint
+        if (current.activeProfile?.storageType == StorageType.AWS_S3) {
+            // S3 没有 OSS ListCname API；仍沿用同一分享弹窗和默认公开地址。
+            _state.value = current.copy(customDomainLookup = CustomDomainLookupState(loaded = true))
+            return
+        }
         if (current.customDomainLookup.loading || current.customDomainLookup.loaded) return
         _state.value = current.copy(customDomainLookup = CustomDomainLookupState(loading = true))
         customDomainsJob = viewModelScope.launch {
@@ -825,8 +1016,10 @@ class BrowserViewModel(
     }
 
     fun move(sourceKey: String, destPrefix: String, newName: String?) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val profileId = snapshot.activeProfile?.id ?: return
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
         viewModelScope.launch {
             val isDir = sourceKey.endsWith("/")
             val baseName = if (isDir) sourceKey.trimEnd('/').substringAfterLast('/')
@@ -843,16 +1036,38 @@ class BrowserViewModel(
                 return@launch
             }
             _state.value = _state.value.copy(task = TaskState.Progress(str(R.string.task_moving), 0, 0))
-            runCatching { service.move(bucket, sourceKey, destKey, endpoint = endpoint) }
+            runCatching { service.move(bucket, sourceKey, destKey, endpoint = endpoint, profileId = profileId) }
                 .onSuccess {
                     _state.value = _state.value.copy(task = TaskState.Done(str(R.string.task_move_done, destKey)))
-                    refresh()
+                    refreshChangedObjectDirectories(
+                        profileId, bucket, setOf(objectParentPrefix(sourceKey), objectParentPrefix(destKey)), isDir
+                    )
                 }
                 .onFailure { e ->
+                    refreshChangedObjectDirectories(
+                        profileId, bucket, setOf(objectParentPrefix(sourceKey), objectParentPrefix(destKey)), isDir
+                    )
                     if (e is CancellationException) throw e
                     _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_move_failed, e.localizedMessage ?: e.toString())))
                 }
         }
+    }
+
+    /**
+     * 普通写操作仅失效受影响父目录；递归目录变更还涉及后代缓存，在 IO 一次清理元数据缓存。
+     * 请求完成时若用户已经切到其他账号或无关目录，不为了旧操作重复读取当前页面。
+     */
+    private suspend fun refreshChangedObjectDirectories(
+        profileId: String, bucket: String, prefixes: Set<String>, recursive: Boolean = false
+    ) {
+        withContext(NonCancellable + Dispatchers.IO) {
+            if (recursive) listCache.clear()
+            else prefixes.forEach { prefix -> listCache.invalidateList(profileId, bucket, prefix) }
+        }
+        val current = _state.value
+        if (current.activeProfile?.id == profileId && current.currentBucket == bucket &&
+            (recursive || current.prefix in prefixes)
+        ) loadCurrent(forceNetwork = true)
     }
 
     fun clearTask() {
@@ -872,7 +1087,8 @@ class BrowserViewModel(
                     repository = app.profileRepository,
                     service = service,
                     settingsRepo = app.settingsRepository,
-                    listCache = app.ossListCache
+                    listCache = app.ossListCache,
+                    uploadRepository = app.uploadRepository
                 ) as T
             }
         }

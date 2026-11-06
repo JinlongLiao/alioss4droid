@@ -1,41 +1,13 @@
-<!--
-  Copyright (C) 2026 jinlongliao
-  Licensed under the Apache License, Version 2.0.
-  ~
-  ~ Launcher 前景图形：一朵白色云 + 橙色上下双向箭头，
-  ~ 寓意阿里云 OSS 客户端的「云存储 · 上传 / 下载」。
-  ~
-  ~ viewport 108×108；有效内容集中在 24..84（adaptive-icon 的安全圆圈内）。
--->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-
-    <!-- 云朵主体：胖胖的对称云形，中心约 (54, 58) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M36,76
-C24,76 22,62 32,57
-C30,46 42,41 50,46
-C53,34 70,32 76,44
-C89,45 90,61 78,64
-C82,74 74,80 64,76 Z" />
-
-    <!-- 橙色上下双向箭头：两头尖、中间细，象征 OSS 上传 + 下载 -->
-    <path
-        android:fillColor="#FF6A00"
-        android:pathData="M54,40
-L65,52
-L59,52
-L59,62
-L65,62
-L54,74
-L43,62
-L49,62
-L49,52
-L43,52
-Z" />
-
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (C) 2026 jinlongliao. Licensed under the Apache License, Version 2.0. -->
+<!-- 云文件夹透明前景在 108dp 画布中居中显示，留出桌面遮罩的裁切空间。
+  88dp 为包含原稿透明留白的图层尺寸，主体保持在中心安全区域。
+  规范：https://developer.android.com/develop/ui/compose/system/icon_design_adaptive -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:width="88dp" android:height="88dp" android:gravity="center">
+    <bitmap
+        android:src="@drawable/ic_launcher_glass"
+        android:gravity="fill"
+        android:filter="true" />
+  </item>
+</layer-list>

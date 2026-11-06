@@ -22,7 +22,6 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.security.MessageDigest
 import java.util.Date
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * OSS 列表的本地缓存（内存 + 磁盘）。
@@ -39,7 +38,25 @@ class OssListCache(context: Context) {
 
     private val dir: File = File(context.cacheDir, "oss-list").apply { mkdirs() }
     private val json = Json { ignoreUnknownKeys = true }
-    private val memory = ConcurrentHashMap<String, Entry>()
+    /** 按访问顺序淘汰内存快照；磁盘TTL和飞行请求代次不随内存淘汰改变。 */
+    private val memory = LinkedHashMap<String, Entry>(MAX_MEMORY_SNAPSHOTS, 0.75f, true)
+
+    /** 内存元数据总条目数，仅在本实例锁内更新。 */
+    internal var memoryMetadataItemCount = 0
+        private set
+
+    /** 供本地回归检查内存上限，不读取或修改磁盘。 */
+    internal val memorySnapshotCount: Int
+        @Synchronized get() = memory.size
+
+    /** 目录失效代次只用于进程内飞行请求，不写入磁盘；单调增长，清缓存也不会复用旧值。 */
+    private var nextListGeneration = 0L
+
+    /** 全量清理后的默认代次，使未单独登记的目录也能拒绝清理前的旧响应。 */
+    private var clearedListGeneration = 0L
+
+    /** 各目录最近一次写操作/刷新导致的失效代次，由本实例锁保护。 */
+    private val listGenerations = HashMap<String, Long>()
 
     // ---------- Bucket 列表 ----------
 
@@ -65,19 +82,35 @@ class OssListCache(context: Context) {
 
     data class Cached(val items: List<OssObjectItem>, val nextMarker: String?)
 
+    @Synchronized
     fun readList(profileId: String, bucket: String, prefix: String): Cached? {
         val entry = get(listKey(profileId, bucket, prefix)) ?: return null
         val items = entry.items ?: return null
         return Cached(items.map { it.toDomain() }, entry.nextMarker)
     }
 
+    /** 读取发起目录请求时的代次，供网络响应写回前核对。 */
+    @Synchronized
+    fun listGeneration(profileId: String, bucket: String, prefix: String): Long =
+        listGenerations[listKey(profileId, bucket, prefix)] ?: clearedListGeneration
+
+    /**
+     * 缓存目录快照；上传、刷新或清理之后才返回的旧响应不能覆盖最新失效状态。
+     * @param expectedGeneration 请求发起时的目录代次；为空时用于没有异步请求的直接写入。
+     * @return 响应仍有效并已缓存时为 true；代次过期时不写入并返回 false。
+     */
+    @Synchronized
     fun writeList(
         profileId: String,
         bucket: String,
         prefix: String,
         items: List<OssObjectItem>,
-        nextMarker: String?
-    ) {
+        nextMarker: String?,
+        expectedGeneration: Long? = null
+    ): Boolean {
+        if (expectedGeneration != null && expectedGeneration != listGeneration(profileId, bucket, prefix)) {
+            return false
+        }
         put(
             listKey(profileId, bucket, prefix),
             Entry(
@@ -86,10 +119,16 @@ class OssListCache(context: Context) {
                 nextMarker = nextMarker
             )
         )
+        return true
     }
 
-    fun invalidateList(profileId: String, bucket: String, prefix: String) =
-        remove(listKey(profileId, bucket, prefix))
+    /** 使指定目录失效，同时拒绝失效之前发起、之后才返回的网络结果。 */
+    @Synchronized
+    fun invalidateList(profileId: String, bucket: String, prefix: String) {
+        val key = listKey(profileId, bucket, prefix)
+        listGenerations[key] = ++nextListGeneration
+        remove(key)
+    }
 
     // ---------- 全局清理 ----------
 
@@ -99,8 +138,12 @@ class OssListCache(context: Context) {
      * 没有按 profileId 精细清理：文件名是 md5 后的 hash，无法反查前缀；
      * 场景多在"改密钥 / 删除账号"触发，整体清更安全也足够简单。
      */
+    @Synchronized
     fun clear() {
+        clearedListGeneration = ++nextListGeneration
+        listGenerations.clear()
         memory.clear()
+        memoryMetadataItemCount = 0
         dir.listFiles()?.forEach { runCatching { it.delete() } }
     }
 
@@ -110,6 +153,7 @@ class OssListCache(context: Context) {
     private fun listKey(profileId: String, bucket: String, prefix: String) =
         "list|$profileId|$bucket|$prefix"
 
+    @Synchronized
     private fun get(key: String): Entry? {
         val now = System.currentTimeMillis()
         memory[key]?.let {
@@ -129,19 +173,51 @@ class OssListCache(context: Context) {
             file.delete()
             return null
         }
-        memory[key] = entry
+        retainMemoryEntry(key, entry)
         return entry
     }
 
+    @Synchronized
     private fun put(key: String, entry: Entry) {
-        memory[key] = entry
+        retainMemoryEntry(key, entry)
         runCatching { fileFor(key).writeText(json.encodeToString(entry)) }
     }
 
+    @Synchronized
     private fun remove(key: String) {
-        memory.remove(key)
+        memory.remove(key)?.let { memoryMetadataItemCount -= entryMetadataCount(it) }
         runCatching { fileFor(key).delete() }
     }
+
+    /**
+     * 保留近期快照，先清理所有已过期内存项，再按总元数据数/快照数淘汰最久未访问项。
+     * 淘汰只释放DTO引用；后续读取仍可命中磁盘，不能删除目录失效代次或磁盘缓存。
+     */
+    private fun retainMemoryEntry(key: String, entry: Entry) {
+        memory.remove(key)?.let { memoryMetadataItemCount -= entryMetadataCount(it) }
+        val now = System.currentTimeMillis()
+        val expired = memory.entries.iterator()
+        while (expired.hasNext()) {
+            val cached = expired.next()
+            if (now - cached.value.savedAt > TTL_MS) {
+                memoryMetadataItemCount -= entryMetadataCount(cached.value)
+                expired.remove()
+            }
+        }
+        memory[key] = entry
+        memoryMetadataItemCount += entryMetadataCount(entry)
+        val oldest = memory.entries.iterator()
+        while (oldest.hasNext() &&
+            (memory.size > MAX_MEMORY_SNAPSHOTS || memoryMetadataItemCount > MAX_MEMORY_METADATA_ITEMS)
+        ) {
+            memoryMetadataItemCount -= entryMetadataCount(oldest.next().value)
+            oldest.remove()
+        }
+    }
+
+    /** 空目录也计为一个快照条目，避免大量空目录绕过内存上限。 */
+    private fun entryMetadataCount(entry: Entry): Int =
+        ((entry.items?.size ?: 0) + (entry.buckets?.size ?: 0)).coerceAtLeast(1)
 
     private fun fileFor(key: String): File = File(dir, md5(key) + ".json")
 
@@ -220,6 +296,10 @@ class OssListCache(context: Context) {
     }
 
     companion object {
+        /** 仅限制内存DTO；超过预算的完整列表仍写磁盘，返回结果不截断。 */
+        private const val MAX_MEMORY_METADATA_ITEMS = 20_000
+        /** 同时约束大量小目录的快照及索引开销，不影响磁盘缓存命中。 */
+        private const val MAX_MEMORY_SNAPSHOTS = 32
         private const val TTL_MS = 30L * 60L * 1000L
         private const val KIND_FOLDER = "folder"
         private const val KIND_FILE = "file"

@@ -23,7 +23,20 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import io.github.jinlongliao.ossbrowser.ui.theme.themedCardSurface
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import io.github.jinlongliao.ossbrowser.ui.theme.themeVisualStyle
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,25 +49,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.Brightness6
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Palette
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.TextSnippet
-import androidx.compose.material.icons.outlined.VpnKey
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
@@ -69,13 +65,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import io.github.jinlongliao.ossbrowser.ui.AppTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,13 +83,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.jinlongliao.ossbrowser.ui.theme.appColorScheme
 import io.github.jinlongliao.ossbrowser.R
-import io.github.jinlongliao.ossbrowser.BuildConfig
 import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.data.ProfileBackupCodec
 import io.github.jinlongliao.ossbrowser.data.ThemeMode
 import io.github.jinlongliao.ossbrowser.data.ThemePalette
-import io.github.jinlongliao.ossbrowser.data.WebBrowserEngine
 import io.github.jinlongliao.ossbrowser.ui.profile.ProfileViewModel
 import io.github.jinlongliao.ossbrowser.util.FileUtils
 import java.io.File
@@ -125,8 +121,6 @@ fun SettingsScreen(
     var showLangDialog by remember { mutableStateOf(false) }
     var showPageSizeDialog by remember { mutableStateOf(false) }
     var showTextMaxDialog by remember { mutableStateOf(false) }
-    /** 是否展示网页控制台浏览器引擎选择弹窗。 */
-    var showWebBrowserEngineDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirm by remember { mutableStateOf(false) }
     var exportDialogOpen by remember { mutableStateOf(false) }
     var importDialogOpen by remember { mutableStateOf(false) }
@@ -201,8 +195,9 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
+            AppTopBar(
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -219,7 +214,8 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            // 密钥管理：设置页优先级最高的入口。醒目卡片突出显示当前激活项，未配置时以警示色提示。
+
+            // 密钥管理：设置页优先级最高的入口。卡片显示当前激活项，未配置时提供同样清晰的引导。
             SectionTitle(stringResource(R.string.settings_section_profiles))
             ProfileEntryCard(
                 activeProfileName = activeProfileName,
@@ -230,19 +226,19 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_appearance))
             SettingRow(
-                icon = Icons.Outlined.Palette,
+                icon = SettingsIcons.Palette,
                 title = stringResource(R.string.settings_color_theme),
                 subtitle = paletteLabel(settings.themePalette),
                 onClick = { showPaletteDialog = true }
             )
             SettingRow(
-                icon = Icons.Outlined.Brightness6,
+                icon = SettingsIcons.Mode,
                 title = stringResource(R.string.settings_theme),
                 subtitle = themeLabel(settings.themeMode),
                 onClick = { showThemeDialog = true }
             )
             SettingRow(
-                icon = Icons.Outlined.Language,
+                icon = SettingsIcons.Language,
                 title = stringResource(R.string.settings_language),
                 subtitle = languageLabel(settings.languageTag),
                 onClick = { showLangDialog = true }
@@ -251,22 +247,7 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_browse))
             SettingRow(
-                icon = Icons.Outlined.Language,
-                title = stringResource(R.string.settings_web_browser_engine),
-                subtitle = when (settings.webBrowserEngine) {
-                    WebBrowserEngine.SYSTEM_WEBVIEW ->
-                        stringResource(R.string.settings_web_browser_engine_system)
-                    WebBrowserEngine.GECKOVIEW ->
-                        stringResource(R.string.settings_web_browser_engine_gecko)
-                },
-                onClick = {
-                    if (BuildConfig.HAS_GECKOVIEW) {
-                        showWebBrowserEngineDialog = true
-                    }
-                }
-            )
-            SettingRow(
-                icon = Icons.Outlined.FolderOpen,
+                icon = SettingsIcons.Pages,
                 title = stringResource(R.string.settings_page_size),
                 subtitle = stringResource(R.string.settings_page_size_value, settings.pageSize),
                 onClick = { showPageSizeDialog = true }
@@ -275,13 +256,13 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_preview))
             SettingRow(
-                icon = Icons.Outlined.TextSnippet,
+                icon = SettingsIcons.TextPreview,
                 title = stringResource(R.string.settings_text_preview_max),
                 subtitle = FileUtils.humanSize(settings.textPreviewMaxBytes),
                 onClick = { showTextMaxDialog = true }
             )
             SettingSwitch(
-                icon = Icons.Outlined.PlayCircle,
+                icon = SettingsIcons.Playback,
                 title = stringResource(R.string.settings_auto_play),
                 subtitle = stringResource(R.string.settings_auto_play_desc),
                 checked = settings.autoPlayMedia,
@@ -291,24 +272,17 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_security))
             SettingSwitch(
-                icon = Icons.Outlined.Security,
+                icon = SettingsIcons.Security,
                 title = stringResource(R.string.settings_confirm_destructive),
                 subtitle = stringResource(R.string.settings_confirm_destructive_desc),
                 checked = settings.confirmDestructiveOps,
                 onChange = vm::setConfirmDestructive
             )
-            SettingSwitch(
-                icon = Icons.Outlined.PrivacyTip,
-                title = stringResource(R.string.settings_web_diagnostics_redaction),
-                subtitle = stringResource(R.string.settings_web_diagnostics_redaction_desc),
-                checked = settings.webDiagnosticsRedactionEnabled,
-                onChange = vm::setWebDiagnosticsRedaction
-            )
 
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_storage))
             SettingRow(
-                icon = Icons.Outlined.CleaningServices,
+                icon = SettingsIcons.Cache,
                 title = stringResource(R.string.settings_clear_cache),
                 subtitle = stringResource(R.string.settings_clear_cache_desc),
                 onClick = { showClearCacheConfirm = true }
@@ -317,13 +291,13 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_backup))
             SettingRow(
-                icon = Icons.Outlined.FileUpload,
+                icon = SettingsIcons.Export,
                 title = stringResource(R.string.settings_export_profiles),
                 subtitle = stringResource(R.string.settings_export_profiles_desc),
                 onClick = { exportDialogOpen = true }
             )
             SettingRow(
-                icon = Icons.Outlined.FileDownload,
+                icon = SettingsIcons.Import,
                 title = stringResource(R.string.settings_import_profiles),
                 subtitle = stringResource(R.string.settings_import_profiles_desc),
                 onClick = { importDialogOpen = true }
@@ -332,30 +306,30 @@ fun SettingsScreen(
             SectionDivider()
             SectionTitle(stringResource(R.string.settings_section_about))
             SettingRow(
-                icon = Icons.Outlined.Info,
+                icon = SettingsIcons.Info,
                 title = stringResource(R.string.settings_version),
                 subtitle = appVersionName(context)
             )
             SettingRow(
-                icon = Icons.Outlined.Person,
+                icon = SettingsIcons.Person,
                 title = stringResource(R.string.settings_author),
                 subtitle = stringResource(R.string.settings_author_desc),
                 onClick = { openUrl(context, SettingsContent.AUTHOR_URL) }
             )
             SettingRow(
-                icon = Icons.Outlined.Code,
+                icon = SettingsIcons.Project,
                 title = stringResource(R.string.settings_project),
                 subtitle = SettingsContent.PROJECT_URL,
                 onClick = { openUrl(context, SettingsContent.PROJECT_URL) }
             )
             SettingRow(
-                icon = Icons.AutoMirrored.Outlined.MenuBook,
+                icon = SettingsIcons.License,
                 title = stringResource(R.string.settings_licenses),
                 subtitle = stringResource(R.string.settings_licenses_desc),
                 onClick = onOpenLicenses
             )
             SettingRow(
-                icon = Icons.Outlined.PrivacyTip,
+                icon = SettingsIcons.Privacy,
                 title = stringResource(R.string.settings_privacy),
                 subtitle = stringResource(R.string.settings_privacy_desc),
                 onClick = onOpenPrivacy
@@ -378,13 +352,7 @@ fun SettingsScreen(
     }
 
     if (showPaletteDialog) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_color_theme),
-            options = listOf(
-                stringResource(R.string.settings_color_theme_default) to ThemePalette.DEFAULT,
-                stringResource(R.string.settings_color_theme_gemini) to ThemePalette.GEMINI,
-                stringResource(R.string.settings_color_theme_summer_sky) to ThemePalette.SUMMER_SKY
-            ),
+        ThemePaletteDialog(
             selected = settings.themePalette,
             onSelect = { vm.setThemePalette(it); showPaletteDialog = false },
             onDismiss = { showPaletteDialog = false }
@@ -426,24 +394,6 @@ fun SettingsScreen(
             selected = settings.pageSize,
             onSelect = { vm.setPageSize(it); showPageSizeDialog = false },
             onDismiss = { showPageSizeDialog = false }
-        )
-    }
-
-    if (showWebBrowserEngineDialog && BuildConfig.HAS_GECKOVIEW) {
-        SingleChoiceDialog(
-            title = stringResource(R.string.settings_web_browser_engine),
-            options = listOf(
-                stringResource(R.string.settings_web_browser_engine_system) to
-                    WebBrowserEngine.SYSTEM_WEBVIEW,
-                stringResource(R.string.settings_web_browser_engine_gecko) to
-                    WebBrowserEngine.GECKOVIEW
-            ),
-            selected = settings.webBrowserEngine,
-            onSelect = {
-                vm.setWebBrowserEngine(it)
-                showWebBrowserEngineDialog = false
-            },
-            onDismiss = { showWebBrowserEngineDialog = false }
         )
     }
 
@@ -536,14 +486,8 @@ private fun ProfileEntryCard(
     onClick: () -> Unit
 ) {
     val hasActive = !activeProfileName.isNullOrBlank()
-    val containerColor = if (hasActive)
-        MaterialTheme.colorScheme.primaryContainer
-    else
-        MaterialTheme.colorScheme.errorContainer
-    val onContainer = if (hasActive)
-        MaterialTheme.colorScheme.onPrimaryContainer
-    else
-        MaterialTheme.colorScheme.onErrorContainer
+    val containerColor = MaterialTheme.colorScheme.surface
+    val onContainer = MaterialTheme.colorScheme.onSurface
 
     Card(
         modifier = Modifier
@@ -556,11 +500,10 @@ private fun ProfileEntryCard(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (hasActive) Icons.Outlined.VpnKey else Icons.Outlined.WarningAmber,
+            TonalIcon(
+                imageVector = SettingsIcons.Account,
                 contentDescription = null,
-                modifier = Modifier.size(28.dp),
-                tint = onContainer
+                tint = MaterialTheme.colorScheme.primary
             )
             Column(
                 modifier = Modifier
@@ -604,12 +547,113 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.DARK -> stringResource(R.string.settings_theme_dark)
 }
 
+/**
+ * 配色选择弹窗在切换前展示浅色示意色块，减少只凭主题名称猜测的成本。
+ *
+ * @param selected 当前生效的主题，保存后的枚举名兼容应用升级。
+ * @param onSelect 用户选择主题时调用；不改变单独设置的明暗模式。
+ * @param onDismiss 关闭弹窗。
+ * @see <a href="https://manual.raycast.com/themes">Raycast theme preview</a>
+ */
+@Composable
+private fun ThemePaletteDialog(
+    selected: ThemePalette,
+    onSelect: (ThemePalette) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_color_theme)) },
+        text = {
+            LazyColumn(
+                state = rememberLazyListState(
+                    initialFirstVisibleItemIndex = ThemePalette.entries.indexOf(selected).coerceAtLeast(0)
+                ),
+                modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(ThemePalette.entries, key = { it.name }) { palette ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                            .selectable(
+                                selected = palette == selected,
+                                role = Role.RadioButton,
+                                onClick = { onSelect(palette) }
+                            )
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = palette == selected, onClick = null)
+                        Text(paletteLabel(palette), modifier = Modifier.weight(1f))
+                        ThemePalettePreview(palette)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) }
+        }
+    )
+}
+
+/**
+ * 将真实色板、材质和圆角缩略呈现为两张内容卡，避免只用色块掩盖主题间的形态差异。
+ * @param palette 需要预览的主题；以浅色示例展示，应用时仍遵守用户明暗设置。
+ */
+@Composable
+private fun ThemePalettePreview(palette: ThemePalette) {
+    val colors = appColorScheme(palette, false)
+    val style = themeVisualStyle(palette, false)
+    val background = if (style.backgroundColors.size > 1) style.backgroundColors
+        else listOf(colors.background, colors.background)
+    Box(
+        Modifier.width(82.dp).height(52.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Brush.linearGradient(background))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .padding(7.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            repeat(2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(colors.surface, RoundedCornerShape(style.cornerRadius / 4))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(6.dp).background(colors.primary, CircleShape))
+                    Box(Modifier.width(32.dp).height(3.dp).background(colors.onSurface.copy(alpha = 0.35f)))
+                }
+            }
+        }
+    }
+}
+
 /** 返回当前 Locale 下的配色主题名称。 */
 @Composable
 private fun paletteLabel(palette: ThemePalette): String = when (palette) {
     ThemePalette.DEFAULT -> stringResource(R.string.settings_color_theme_default)
     ThemePalette.GEMINI -> stringResource(R.string.settings_color_theme_gemini)
     ThemePalette.SUMMER_SKY -> stringResource(R.string.settings_color_theme_summer_sky)
+    ThemePalette.CELADON -> stringResource(R.string.settings_color_theme_celadon)
+    ThemePalette.DUSK -> stringResource(R.string.settings_color_theme_dusk)
+    ThemePalette.SAND -> stringResource(R.string.settings_color_theme_sand)
+    ThemePalette.PRISM -> stringResource(R.string.settings_color_theme_prism)
+    ThemePalette.AURORA -> stringResource(R.string.settings_color_theme_aurora)
+    ThemePalette.GLACIER_GLASS -> stringResource(R.string.settings_color_theme_glacier_glass)
+    ThemePalette.TWILIGHT_GLASS -> stringResource(R.string.settings_color_theme_twilight_glass)
+    ThemePalette.MONOCHROME -> stringResource(R.string.settings_color_theme_monochrome)
+    ThemePalette.TERMINAL -> stringResource(R.string.settings_color_theme_terminal)
+    ThemePalette.CYBER -> stringResource(R.string.settings_color_theme_cyber)
+    ThemePalette.PAPER -> stringResource(R.string.settings_color_theme_paper)
+    ThemePalette.SAKURA -> stringResource(R.string.settings_color_theme_sakura)
+    ThemePalette.FOREST -> stringResource(R.string.settings_color_theme_forest)
+    ThemePalette.SEA_SALT -> stringResource(R.string.settings_color_theme_sea_salt)
+    ThemePalette.SUNSET -> stringResource(R.string.settings_color_theme_sunset)
 }
 
 @Composable
@@ -621,6 +665,7 @@ private fun languageLabel(tag: String): String = when (tag) {
     else -> tag
 }
 
+/** 设置分组标题，通过字重和留白区分层级。 */
 @Composable
 private fun SectionTitle(text: String) {
     Text(
@@ -632,11 +677,16 @@ private fun SectionTitle(text: String) {
     )
 }
 
+/** 分组间使用轻量分隔，不横穿页面边缘。 */
 @Composable
 private fun SectionDivider() {
-    HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+        color = MaterialTheme.colorScheme.outlineVariant
+    )
 }
 
+/** 设置项卡片；只有可操作项显示方向提示，文本仍支持系统字号。 */
 @Composable
 private fun SettingRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -647,9 +697,8 @@ private fun SettingRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .themedCardSurface()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -659,7 +708,7 @@ private fun SettingRow(
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary
         )
-        Column(Modifier.padding(start = 16.dp).fillMaxWidth()) {
+        Column(Modifier.padding(start = 16.dp).weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             if (!subtitle.isNullOrBlank()) {
                 Text(
@@ -669,9 +718,17 @@ private fun SettingRow(
                 )
             }
         }
+        if (onClick != null) {
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
+/** 开关项与普通设置项共用卡片样式，点击和开关逻辑沿用既有行为。 */
 @Composable
 private fun SettingSwitch(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -683,9 +740,8 @@ private fun SettingSwitch(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .themedCardSurface()
             .clickable { onChange(!checked) }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -757,7 +813,7 @@ private fun ExportDialog(
     var password by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+        icon = { Icon(SettingsIcons.Export, contentDescription = null) },
         title = { Text(stringResource(R.string.export_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -774,7 +830,7 @@ private fun ExportDialog(
                 Text(
                     stringResource(R.string.export_password_help),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -797,7 +853,7 @@ private fun ImportDialog(
     var password by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Outlined.FileDownload, contentDescription = null) },
+        icon = { Icon(SettingsIcons.Import, contentDescription = null) },
         title = { Text(stringResource(R.string.import_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

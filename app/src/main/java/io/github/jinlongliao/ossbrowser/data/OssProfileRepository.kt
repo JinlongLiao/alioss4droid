@@ -113,7 +113,8 @@ class OssProfileRepository(context: Context) {
         for (p in incoming) {
             val byId = merged.indexOfFirst { it.id == p.id }
             val idx = if (byId >= 0) byId else merged.indexOfFirst {
-                it.endpoint.equals(p.endpoint, true) && it.accessKeyId == p.accessKeyId
+                it.storageType == p.storageType && it.region == p.region &&
+                    it.endpoint.equals(p.endpoint, true) && it.accessKeyId == p.accessKeyId
             }
             if (idx >= 0) {
                 merged[idx] = p.copy(id = merged[idx].id)

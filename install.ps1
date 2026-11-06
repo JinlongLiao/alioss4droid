@@ -15,7 +15,7 @@
   Start the app after install.
 
 .PARAMETER Clean
-  Run `gradle clean` before assembleLiteDebug (ignored with -NoBuild).
+  Run `gradle clean` before assembleDebug (ignored with -NoBuild).
 
 .EXAMPLE
   .\install.ps1 -Launch
@@ -31,11 +31,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$apkPath          = "app\build\outputs\apk\lite\debug\app-lite-debug.apk"
+$apkPath          = "app\build\outputs\apk\debug\app-debug.apk"
 # Debug build appends `.debug` via applicationIdSuffix; keep these in sync with app/build.gradle.kts.
 $packageId        = "io.github.jinlongliao.ossbrowser.debug"
 $launcherActivity = "io.github.jinlongliao.ossbrowser.MainActivity"
-$remoteApk        = "/data/local/tmp/oss-browser-lite-debug.apk"
+$remoteApk        = "/data/local/tmp/oss-browser-debug.apk"
 
 function Step([string]$msg) {
     Write-Host ""
@@ -46,7 +46,7 @@ function Step([string]$msg) {
 if (-not $NoBuild) {
     $tasks = @()
     if ($Clean) { $tasks += "clean" }
-    $tasks += "assembleLiteDebug"
+    $tasks += "assembleDebug"
     Step ("gradle " + ($tasks -join " "))
     & ".\gradlew.bat" @tasks --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Gradle build failed" }

@@ -16,6 +16,10 @@
 package io.github.jinlongliao.ossbrowser.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import io.github.jinlongliao.ossbrowser.ui.theme.LocalThemeVisualStyle
+import io.github.jinlongliao.ossbrowser.ui.theme.ThemeIconStyle
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +33,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
 /**
- * 带柔和色块容器的语义图标。
+ * 随主题切换描线、柔和色块、玻璃和几何容器的语义图标。
  *
  * 统一的 44dp 容器扩大视觉层次和触控区域辨识度，图标本身保持 Material 推荐的 24dp；
  * 它只用于列表前导图标，不自行处理点击事件，避免与父级列表项产生嵌套点击语义。
@@ -48,10 +52,23 @@ fun TonalIcon(
     tint: Color = MaterialTheme.colorScheme.primary,
     containerColor: Color = MaterialTheme.colorScheme.primaryContainer
 ) {
+    val style = LocalThemeVisualStyle.current.iconStyle
+    val shape = RoundedCornerShape(if (style == ThemeIconStyle.GEOMETRIC) 5.dp else 12.dp)
+    val material = when (style) {
+        ThemeIconStyle.LINE -> Modifier
+        ThemeIconStyle.GLASS -> Modifier
+            .background(
+                Brush.linearGradient(listOf(Color.White.copy(alpha = 0.4f), containerColor.copy(alpha = 0.65f))),
+                shape
+            )
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+        ThemeIconStyle.GEOMETRIC -> Modifier
+            .background(containerColor, shape)
+            .border(1.dp, tint.copy(alpha = 0.35f), shape)
+        ThemeIconStyle.SOFT -> Modifier.background(containerColor, shape)
+    }
     Box(
-        modifier = modifier
-            .size(44.dp)
-            .background(containerColor, RoundedCornerShape(14.dp)),
+        modifier = modifier.size(44.dp).then(material),
         contentAlignment = Alignment.Center
     ) {
         Icon(
