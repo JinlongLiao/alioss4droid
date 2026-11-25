@@ -16,45 +16,49 @@
 package io.github.jinlongliao.ossbrowser.ui
 
 import android.app.Activity
-import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.material3.NavigationBarItemDefaults
-import io.github.jinlongliao.ossbrowser.ui.theme.LocalThemeVisualStyle
-import io.github.jinlongliao.ossbrowser.ui.theme.ThemeBackdrop
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.Modifier
-import io.github.jinlongliao.ossbrowser.OssBrowserApp
-import io.github.jinlongliao.ossbrowser.R
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import io.github.jinlongliao.ossbrowser.OssBrowserApp
+import io.github.jinlongliao.ossbrowser.R
 import io.github.jinlongliao.ossbrowser.ui.browser.BrowserScreen
 import io.github.jinlongliao.ossbrowser.ui.profile.ProfileEditScreen
 import io.github.jinlongliao.ossbrowser.ui.profile.ProfileListScreen
@@ -63,6 +67,8 @@ import io.github.jinlongliao.ossbrowser.ui.settings.PrivacyConsentDialog
 import io.github.jinlongliao.ossbrowser.ui.settings.PrivacyScreen
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsScreen
 import io.github.jinlongliao.ossbrowser.ui.settings.SettingsViewModel
+import io.github.jinlongliao.ossbrowser.ui.theme.LocalThemeVisualStyle
+import io.github.jinlongliao.ossbrowser.ui.theme.ThemeBackdrop
 
 private object Routes {
     const val BROWSER = "browser"
@@ -89,11 +95,6 @@ fun OssBrowserRoot() {
     val showBottomBar = currentRoute == Routes.BROWSER ||
         currentRoute == Routes.SETTINGS
 
-    val visuals = LocalThemeVisualStyle.current
-    val navigationColors = NavigationBarItemDefaults.colors(
-        indicatorColor = if (visuals.accentColors.isEmpty()) MaterialTheme.colorScheme.secondaryContainer
-            else Color.Transparent
-    )
     Box(Modifier.fillMaxSize()) {
         ThemeBackdrop()
         Scaffold(
@@ -103,54 +104,24 @@ fun OssBrowserRoot() {
             containerColor = Color.Transparent,
             bottomBar = {
                 if (showBottomBar) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp
-                    ) {
-                        NavigationBarItem(
-                            colors = navigationColors,
-                            selected = currentRoute == Routes.BROWSER,
-                            onClick = {
-                                if (currentRoute != Routes.BROWSER) {
-                                    navController.navigate(Routes.BROWSER) {
-                                        popUpTo(Routes.BROWSER) { inclusive = true }
-                                        launchSingleTop = true
-                                    }
+                    BrowserBottomBar(
+                        showingFiles = currentRoute == Routes.BROWSER,
+                        onOpenFiles = {
+                            if (currentRoute != Routes.BROWSER) {
+                                navController.navigate(Routes.BROWSER) {
+                                    popUpTo(Routes.BROWSER) { inclusive = true }
+                                    launchSingleTop = true
                                 }
-                            },
-                            icon = {
-                                ThemedNavigationIcon(
-                                    imageVector = Icons.Outlined.Folder,
-                                    selected = currentRoute == Routes.BROWSER
-                                )
-                            },
-                            label = { Text(stringResource(R.string.nav_files)) }
-                        )
-                        NavigationBarItem(
-                            colors = navigationColors,
-                            selected = backStack?.destination?.hierarchy?.any {
-                                it.route?.startsWith("settings") == true ||
-                                    it.route?.startsWith("profile") == true
-                            } == true,
-                            onClick = {
-                                if (currentRoute != Routes.SETTINGS) {
-                                    navController.navigate(Routes.SETTINGS) {
-                                        launchSingleTop = true
-                                    }
+                            }
+                        },
+                        onOpenSettings = {
+                            if (currentRoute != Routes.SETTINGS) {
+                                navController.navigate(Routes.SETTINGS) {
+                                    launchSingleTop = true
                                 }
-                            },
-                            icon = {
-                                ThemedNavigationIcon(
-                                    imageVector = Icons.Outlined.Settings,
-                                    selected = backStack?.destination?.hierarchy?.any {
-                                        it.route?.startsWith("settings") == true ||
-                                            it.route?.startsWith("profile") == true
-                                    } == true
-                                )
-                            },
-                            label = { Text(stringResource(R.string.nav_settings)) }
-                        )
-                    }
+                            }
+                        }
+                    )
                 }
             }
         ) { padding ->
@@ -161,7 +132,8 @@ fun OssBrowserRoot() {
             ) {
                 composable(Routes.BROWSER) {
                     BrowserScreen(
-                        onOpenProfiles = { navController.navigate(Routes.PROFILES) }
+                        onAddProfile = { navController.navigate(Routes.profileEdit(null)) },
+                        onManageAccounts = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } }
                     )
                 }
                 composable(Routes.PROFILES) {
@@ -212,28 +184,58 @@ fun OssBrowserRoot() {
     }
 }
 
-/**
- * 导航图标使用当前选中项的语义颜色，避免在系统指示胶囊上再叠加第二层色块。
- *
- * @param imageVector 导航项图标。
- * @param selected 是否为当前页面。
- */
+/** 浮动底栏与系统导航区留出间距，页面主题可从两侧透出。 */
 @Composable
-private fun ThemedNavigationIcon(imageVector: ImageVector, selected: Boolean) {
-    val accent = LocalThemeVisualStyle.current.accentColors
-    val useGradient = selected && accent.isNotEmpty()
-    val background = if (useGradient) {
-        Modifier.background(Brush.horizontalGradient(accent), RoundedCornerShape(14.dp))
-    } else Modifier
+private fun BrowserBottomBar(
+    showingFiles: Boolean,
+    onOpenFiles: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
     Box(
-        modifier = Modifier.size(width = 64.dp, height = 32.dp).then(background),
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = imageVector,
-            contentDescription = null,
-            tint = if (useGradient) Color.White else if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Surface(
+            shape = CircleShape,
+            color = colors.surface.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, colors.outlineVariant.copy(alpha = 0.5f)),
+            shadowElevation = 4.dp
+        ) {
+            Row(Modifier.selectableGroup().padding(4.dp)) {
+                BrowserBottomTab(Icons.Outlined.Folder, stringResource(R.string.nav_files), showingFiles, onOpenFiles)
+                BrowserBottomTab(
+                    Icons.Outlined.Settings, stringResource(R.string.nav_settings), !showingFiles, onOpenSettings
+                )
+            }
+        }
+    }
+}
+
+/** 图标和标签共享选中背景，整个胶囊区域都可以点击。 */
+@Composable
+private fun BrowserBottomTab(imageVector: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val accent = LocalThemeVisualStyle.current.accentColors
+    val useGradient = selected && accent.isNotEmpty()
+    val background = when {
+        useGradient -> Modifier.background(Brush.horizontalGradient(accent))
+        selected -> Modifier.background(colors.secondaryContainer)
+        else -> Modifier
+    }
+    val tint = when {
+        useGradient -> Color.White
+        selected -> colors.onSecondaryContainer
+        else -> colors.onSurfaceVariant
+    }
+    Column(
+        modifier = Modifier.clip(CircleShape).then(background)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .sizeIn(minWidth = 88.dp, minHeight = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(imageVector, contentDescription = null, modifier = Modifier.size(22.dp), tint = tint)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
     }
 }

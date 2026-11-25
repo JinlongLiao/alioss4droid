@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OSS Browser for Android</string>
+    <string name="app_name">Alioss4droid</string>
     <string name="app_brand">OSS Browser for Android</string>
     <string name="app_description_short">开源的阿里云 OSS 安卓客户端</string>
 
@@ -29,8 +29,8 @@
     <string name="nav_settings">设置</string>
 
 
-    <string name="profiles_title">对象存储配置</string>
-    <string name="profiles_add">新增配置</string>
+    <string name="profiles_title">管理账号</string>
+    <string name="profiles_add">添加账号</string>
     <string name="profiles_empty">尚未配置对象存储账号，点击右下角添加。</string>
     <string name="profiles_unnamed">(未命名)</string>
     <string name="profiles_default_bucket">默认 bucket: %1$s</string>
@@ -38,16 +38,16 @@
     <string name="profiles_delete_title">删除密钥配置</string>
     <string name="profiles_delete_message">确定要删除「%1$s」吗？此操作只会删除本地配置，不会影响云端数据。</string>
 
-    <string name="profile_title_new">新增存储配置</string>
-    <string name="profile_title_edit">编辑存储配置</string>
-    <string name="profile_field_name_required">配置名称 *</string>
-    <string name="profile_field_endpoint_required">Endpoint（如 https://oss-cn-hangzhou.aliyuncs.com） *</string>
-    <string name="profile_field_bucket_optional">默认 Bucket（可选，留空则进入后显示全部 Bucket）</string>
-    <string name="profile_field_ak_required">AccessKey ID *</string>
-    <string name="profile_field_sk_required">AccessKey Secret *</string>
+    <string name="profile_title_new">存储账号</string>
+    <string name="profile_title_edit">存储账号</string>
+    <string name="profile_field_name_required">名称</string>
+    <string name="profile_field_endpoint_required">HTTPS 端点</string>
+    <string name="profile_field_bucket_optional">默认 Bucket（可选）</string>
+    <string name="profile_field_ak_required">AccessKey ID</string>
+    <string name="profile_field_sk_required">AccessKey Secret</string>
     <string name="profile_show_secret">显示 Secret</string>
     <string name="profile_hide_secret">隐藏 Secret</string>
-    <string name="profile_field_note">备注</string>
+    <string name="profile_field_note">备注（可选）</string>
     <string name="profile_save_and_activate">保存并激活</string>
 
     <string name="browser_title">OSS 浏览器</string>
@@ -56,18 +56,16 @@
     <string name="browser_empty_buckets">该账号下没有 Bucket。</string>
     <string name="browser_empty_folder">该目录为空。</string>
     <string name="browser_item_folder_label">目录</string>
-    <string name="browser_no_active_profile">请先在「密钥」页新增并激活一个对象存储配置。</string>
-    <string name="browser_no_profile_title">未选择配置</string>
+    <string name="browser_no_active_profile">添加或选择一个存储账号。</string>
     <string name="browser_no_profile_subtitle">请先在「密钥」页新建并激活</string>
     <string name="browser_bucket_list_subtitle">Bucket 列表</string>
     <string name="browser_bucket_subtitle">bucket: %1$s</string>
-    <string name="browser_go_configure">去配置</string>
     <string name="browser_jump_path">跳转到路径</string>
-    <string name="browser_sort">文件排序</string>
-    <string name="browser_sort_name_ascending">名称：正序</string>
-    <string name="browser_sort_name_descending">名称：倒序</string>
-    <string name="browser_sort_time_ascending">修改时间：从旧到新</string>
-    <string name="browser_sort_time_descending">修改时间：从新到旧</string>
+    <string name="browser_sort">排序方式</string>
+    <string name="browser_sort_name_ascending">名称正序</string>
+    <string name="browser_sort_name_descending">名称倒序</string>
+    <string name="browser_sort_time_ascending">最早修改优先</string>
+    <string name="browser_sort_time_descending">最新修改优先</string>
     <string name="browser_more_actions">更多操作</string>
     <string name="browser_mkdir">新建目录</string>
     <string name="browser_mkdir_name_label">目录名</string>
@@ -152,6 +150,8 @@
     <string name="preview_choose_player">选择播放器</string>
     <string name="preview_toggle_markdown_rich">以 Markdown 渲染</string>
     <string name="preview_toggle_markdown_source">查看源码</string>
+    <string name="preview_html_show_source">查看源码</string>
+    <string name="preview_html_show_page">返回网页预览</string>
     <string name="preview_html_switch_full">开启完整网页预览</string>
     <string name="preview_html_switch_safe">返回安全静态预览</string>
     <string name="preview_html_full_confirm_title">开启完整网页预览？</string>
@@ -190,7 +190,7 @@
 
     <string name="settings_title">设置</string>
     <string name="settings_section_profiles">对象存储配置（必填）</string>
-    <string name="settings_profiles_title">对象存储账号 / 配置</string>
+    <string name="settings_profiles_title">存储账号</string>
     <string name="settings_profiles_active">当前: %1$s · 共 %2$d 条</string>
     <string name="settings_profiles_not_activated">已保存 %1$d 条，尚未激活。点击选择一条激活。</string>
     <string name="settings_profiles_none">尚未配置，点击添加 OSS 或 AWS S3 账号。</string>
@@ -286,12 +286,12 @@
   <string name="upload_clear_failed">部分本地文件清理失败，请再次尝试。</string>
   <string name="brand_files_title">云端文件</string>
   <string name="brand_files_description">浏览、预览与传输你的云端文件</string>
-  <string name="profile_storage_type">存储类型</string>
-  <string name="profile_storage_oss">阿里云 OSS</string>
-  <string name="profile_s3_region">AWS Region（必填）</string>
-  <string name="profile_s3_token">SessionToken（临时凭证可选）</string>
-  <string name="profile_s3_path_style">使用路径形式访问 Bucket</string>
-  <string name="profile_s3_endpoint">Endpoint（可选，默认使用 AWS 区域端点）</string>
+  <string name="profile_storage_type">类型</string>
+  <string name="profile_storage_oss">OSS</string>
+  <string name="profile_s3_region">区域</string>
+  <string name="profile_s3_token">Session Token（可选）</string>
+  <string name="profile_s3_path_style">使用 path-style</string>
+  <string name="profile_s3_endpoint">HTTPS 端点（可选）</string>
   <string name="settings_color_theme_celadon">青瓷</string>
   <string name="settings_color_theme_dusk">暮紫</string>
   <string name="settings_color_theme_sand">暖砂</string>
@@ -352,8 +352,8 @@
     <string name="preview_pdf_extreme_page_hint">此页面比例特殊，已整体缩小展示。查看细节请下载原文件。</string>
   <string name="browser_layout_list">列表</string>
   <string name="browser_layout_waterfall">双列瀑布流</string>
-  <string name="profile_storage_s3">AWS S3</string>
-  <string name="profile_oss_region">OSS 地域</string>
+  <string name="profile_storage_s3">S3</string>
+  <string name="profile_oss_region">区域</string>
   <string name="profile_oss_region_hint">选择地域后自动填写公网 HTTPS Endpoint；也可在下方手动修改地址。</string>
   <string name="profile_oss_region_search">搜索地域名称或代码</string>
   <string name="profile_oss_region_custom">自定义 Endpoint</string>
@@ -388,10 +388,21 @@
   <string name="oss_region_na_south_1">墨西哥</string>
   <string name="oss_region_sa_east_1">巴西圣保罗</string>
   <string name="oss_region_me_east_1">阿联酋迪拜</string>
-  <string name="browser_view_settings">视图设置</string>
-  <string name="browser_layout_section">显示方式</string>
-  <string name="browser_files_transfers">文件与传输</string>
-  <string name="browser_browsing_section">浏览视图</string>
-  <string name="browser_configuration_section">存储配置</string>
   <string name="browser_more_with_uploads">更多操作，%1$d 项上传进行中</string>
+    <string name="browser_switch_account">切换账号</string>
+    <string name="browser_current_account">当前账号</string>
+    <string name="browser_select_bucket">选择 Bucket</string>
+  <string name="preview_edit_open">编辑</string>
+  <string name="preview_edit_diff">查看差异</string>
+  <string name="preview_edit_confirm">确认更新</string>
+  <string name="preview_edit_review_message">确认更新前，请检查以下差异。</string>
+  <string name="preview_edit_oss_concurrency">OSS 保存前校验版本，校验后仍可能发生并发更新。</string>
+  <string name="preview_edit_acl">保存会替换同名对象，可能改变对象级访问权限。</string>
+  <string name="preview_edit_too_large">编辑后的文本超过大小上限。</string>
+  <string name="preview_edit_failed">更新失败。对象可能已变化，请检查权限或重新打开预览。</string>
+  <string name="browser_choose_account">选择账号</string>
+  <string name="browser_add_account">添加账号</string>
+  <string name="browser_manage_accounts">管理账号</string>
+  <string name="preview_edit_encoding">文本无法使用原编码无损保存。</string>
+  <string name="preview_edit_missing_version">服务端未返回 ETag，无法安全更新文件。</string>
 </resources>

@@ -15,31 +15,31 @@
  */
 package io.github.jinlongliao.ossbrowser.oss
 
+import java.net.URI
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** ListCname V1 签名与错误脱敏的回归测试。 */
+/** ListCname V4 签名与错误脱敏的回归测试。 */
 class OssListCnameSigningTest {
 
-    /** 签名必须覆盖 `?cname` 子资源，并对 Base64 特殊字符进行 URL 编码。 */
+    /** V4 签名包含 cname 子资源、Bucket 地域，以及可选令牌。 */
     @Test
-    fun createListCnameSignedUrl_includesCnameInKnownSignatureVector() {
-        val url = createListCnameSignedUrl(
-            baseUrl = "https://examplebucket.oss-cn-hangzhou.aliyuncs.com/",
-            bucket = "examplebucket",
-            accessKeyId = "test-access-key",
-            accessKeySecret = "test-secret",
-            expiresAtSeconds = 1_700_000_000L
-        )
-
-        assertEquals(
-            "https://examplebucket.oss-cn-hangzhou.aliyuncs.com/" +
-                "?cname&OSSAccessKeyId=test-access-key&Expires=1700000000&" +
-                "Signature=f5KSVCIv9Jls%2BY%2FvNDzQdCF5Z78%3D",
-            url
-        )
+    fun createListCnameSignedUrl_usesV4AndTheBucketRegion() {
+        val base = "https://examplebucket.oss-cn-hangzhou.aliyuncs.com/"
+        val region = resolveListCnameRegion(base, "cn-shanghai")
+        assertEquals("cn-hangzhou", region)
+        assertEquals("cn-hangzhou", resolveListCnameRegion(
+            "https://examplebucket.oss-cn-hangzhou-internal.aliyuncs.com/", ""
+        ))
+        val url = createListCnameSignedUrl(base, "examplebucket", region, "test-access-key", "test-secret", "token+/")
+        val query = URI(url).query
+        assertTrue(query.contains("cname="))
+        assertTrue(query.contains("x-oss-signature-version=OSS4-HMAC-SHA256"))
+        assertTrue(Regex("x-oss-credential=test-access-key/\\d{8}/cn-hangzhou/oss/aliyun_v4_request").containsMatchIn(query))
+        assertTrue(query.contains("x-oss-security-token=token+/"))
+        assertTrue(Regex("x-oss-signature=[0-9a-f]{64}").containsMatchIn(query))
     }
 
     /** 错误解析只返回 Code，不能把响应中的认证材料继续传给 UI 或日志消息。 */

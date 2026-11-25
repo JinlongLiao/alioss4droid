@@ -21,6 +21,8 @@ import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssObjectItem
 import io.github.jinlongliao.ossbrowser.oss.OssService
 import io.github.jinlongliao.ossbrowser.oss.validateObjectMovePaths
+import io.github.jinlongliao.ossbrowser.oss.resolveTextSnapshotVersion
+import io.github.jinlongliao.ossbrowser.oss.strongTextETag
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStream
@@ -158,12 +160,16 @@ class S3Storage internal constructor(
     /** 流式下载并检查取消，不将文件全部加载到内存；不关闭调用方拥有的输出流。 */
     suspend fun downloadS3Object(
         bucket: String, key: String, output: OutputStream, maxBytes: Long = Long.MAX_VALUE,
-        onProgress: (Long, Long) -> Unit = { _, _ -> }
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
+        onVersion: (String?) -> Unit = {},
+        matchingETag: String? = null
     ): Long = withS3Client("download", bucket, key) { client ->
         client.getObject(GetObjectRequest {
             this.bucket = bucket
             this.key = key
+            ifMatch = matchingETag
         }) { response ->
+            onVersion(response.eTag)
             val length = response.contentLength ?: -1L
             check(length <= maxBytes) { "文件超过预览大小上限" }
             var read = 0L
@@ -189,6 +195,58 @@ class S3Storage internal constructor(
         val output = ByteArrayOutputStream()
         downloadS3Object(bucket, key, output, maxBytes)
         return output.toByteArray()
+    }
+
+    /** 缺失 ETag 时用 HEAD 补取，再由带 If-Match 的 GET 返回可编辑快照。 */
+    suspend fun downloadS3TextSnapshot(
+        bucket: String, key: String, maxBytes: Long, recoverVersion: Boolean, listedETag: String?
+    ): Pair<ByteArray, String?> {
+        suspend fun read(version: String?): Pair<ByteArray, String?> {
+            val output = ByteArrayOutputStream()
+            var responseVersion: String? = null
+            downloadS3Object(bucket, key, output, maxBytes, onVersion = { responseVersion = it }, matchingETag = version)
+            return output.toByteArray() to strongTextETag(responseVersion)
+        }
+        val initial = read(null)
+        if (!recoverVersion || initial.second != null) return initial
+        return resolveTextSnapshotVersion(initial, listedETag, readVersion = {
+            withS3Client("headTextVersion", bucket, key) { client ->
+                client.headObject(HeadObjectRequest {
+                    this.bucket = bucket
+                    this.key = key
+                }).eTag
+            }
+        }, readMatching = ::read)
+    }
+
+    /** HEAD 保留响应元数据，PUT 用 If-Match 拒绝随后发生的并发修改。 */
+    suspend fun replaceS3TextObject(bucket: String, key: String, etag: String, content: ByteArray): String? {
+        return withS3Client("replaceText", bucket, key) { client ->
+            val previous = client.headObject(HeadObjectRequest {
+                this.bucket = bucket
+                this.key = key
+                ifMatch = etag
+            })
+            check(previous.contentEncoding.orEmpty().lowercase() in listOf("", "identity") &&
+                (previous.tagCount ?: 0) == 0
+            ) { "暂不支持更新带内容编码或对象标签的文本。" }
+            val updated = client.putObject(PutObjectRequest {
+                this.bucket = bucket
+                this.key = key
+                body = ByteStream.fromBytes(content)
+                ifMatch = etag
+                contentType = previous.contentType
+                cacheControl = previous.cacheControl
+                contentDisposition = previous.contentDisposition
+                contentLanguage = previous.contentLanguage
+                expires = previous.expires
+                metadata = previous.metadata
+                serverSideEncryption = previous.serverSideEncryption
+                ssekmsKeyId = previous.ssekmsKeyId
+                storageClass = previous.storageClass
+            })
+            strongTextETag(updated.eTag)
+        }
     }
 
     /** 下载失败不保留预览半成品。 */

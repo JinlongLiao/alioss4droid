@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OSS Browser for Android</string>
+    <string name="app_name">Alioss4droid</string>
     <string name="app_brand">OSS Browser for Android</string>
     <string name="app_description_short">Open-source Aliyun OSS client for Android</string>
 
@@ -33,8 +33,8 @@
     <!-- Alibaba Cloud web console -->
 
     <!-- Profiles -->
-    <string name="profiles_title">Object storage accounts</string>
-    <string name="profiles_add">Add profile</string>
+    <string name="profiles_title">Manage accounts</string>
+    <string name="profiles_add">Add account</string>
     <string name="profiles_empty">No object storage account configured. Tap Add to get started.</string>
     <string name="profiles_unnamed">(Unnamed)</string>
     <string name="profiles_default_bucket">Default bucket: %1$s</string>
@@ -43,16 +43,16 @@
     <string name="profiles_delete_message">Delete "%1$s"? This only removes the local profile and will not affect your cloud data.</string>
 
     <!-- Profile edit -->
-    <string name="profile_title_new">New storage account</string>
-    <string name="profile_title_edit">Edit storage account</string>
-    <string name="profile_field_name_required">Profile name *</string>
-    <string name="profile_field_endpoint_required">Endpoint (e.g. https://oss-cn-hangzhou.aliyuncs.com) *</string>
-    <string name="profile_field_bucket_optional">Default bucket (optional; empty lists all buckets)</string>
-    <string name="profile_field_ak_required">AccessKey ID *</string>
-    <string name="profile_field_sk_required">AccessKey Secret *</string>
+    <string name="profile_title_new">Storage account</string>
+    <string name="profile_title_edit">Storage account</string>
+    <string name="profile_field_name_required">Name</string>
+    <string name="profile_field_endpoint_required">HTTPS endpoint</string>
+    <string name="profile_field_bucket_optional">Default bucket (optional)</string>
+    <string name="profile_field_ak_required">AccessKey ID</string>
+    <string name="profile_field_sk_required">AccessKey Secret</string>
     <string name="profile_show_secret">Show Secret</string>
     <string name="profile_hide_secret">Hide Secret</string>
-    <string name="profile_field_note">Note</string>
+    <string name="profile_field_note">Notes (optional)</string>
     <string name="profile_save_and_activate">Save &amp; activate</string>
 
     <!-- Browser -->
@@ -62,18 +62,16 @@
     <string name="browser_empty_buckets">No bucket under this account.</string>
     <string name="browser_empty_folder">This folder is empty.</string>
     <string name="browser_item_folder_label">Folder</string>
-    <string name="browser_no_active_profile">Add and activate a storage account in Accounts first.</string>
-    <string name="browser_no_profile_title">No profile selected</string>
+    <string name="browser_no_active_profile">Add or choose a storage account.</string>
     <string name="browser_no_profile_subtitle">Add and activate a profile on the Keys page</string>
     <string name="browser_bucket_list_subtitle">Bucket list</string>
     <string name="browser_bucket_subtitle">bucket: %1$s</string>
-    <string name="browser_go_configure">Go to configure</string>
     <string name="browser_jump_path">Jump to path</string>
-    <string name="browser_sort">Sort files</string>
-    <string name="browser_sort_name_ascending">Name: A to Z</string>
-    <string name="browser_sort_name_descending">Name: Z to A</string>
-    <string name="browser_sort_time_ascending">Modified time: oldest first</string>
-    <string name="browser_sort_time_descending">Modified time: newest first</string>
+    <string name="browser_sort">Sort by</string>
+    <string name="browser_sort_name_ascending">Name ascending</string>
+    <string name="browser_sort_name_descending">Name descending</string>
+    <string name="browser_sort_time_ascending">Oldest first</string>
+    <string name="browser_sort_time_descending">Newest first</string>
     <string name="browser_more_actions">More actions</string>
     <string name="browser_mkdir">New folder</string>
     <string name="browser_mkdir_name_label">Folder name</string>
@@ -164,6 +162,8 @@
     <string name="preview_choose_player">Choose player</string>
     <string name="preview_toggle_markdown_rich">Render Markdown</string>
     <string name="preview_toggle_markdown_source">Show raw text</string>
+    <string name="preview_html_show_source">View HTML source</string>
+    <string name="preview_html_show_page">View web preview</string>
     <string name="preview_html_switch_full">Enable full web preview</string>
     <string name="preview_html_switch_safe">Return to safe static preview</string>
     <string name="preview_html_full_confirm_title">Enable full web preview?</string>
@@ -204,7 +204,7 @@
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_section_profiles">Storage connection (required)</string>
-    <string name="settings_profiles_title">Storage accounts / configuration</string>
+    <string name="settings_profiles_title">Storage account</string>
     <string name="settings_profiles_active">Active: %1$s · %2$d total</string>
     <string name="settings_profiles_not_activated">%1$d profile(s) saved, none activated. Tap to activate one.</string>
     <string name="settings_profiles_none">No account configured. Tap to add an OSS or AWS S3 account.</string>
@@ -302,12 +302,12 @@
   <string name="upload_clear_failed">Some local files could not be removed. Please try clearing again.</string>
   <string name="brand_files_title">Cloud files</string>
   <string name="brand_files_description">Browse, preview and transfer your cloud files</string>
-  <string name="profile_storage_type">Storage type</string>
-  <string name="profile_storage_oss">Alibaba Cloud OSS</string>
-  <string name="profile_s3_region">AWS Region (required)</string>
-  <string name="profile_s3_token">SessionToken (optional)</string>
-  <string name="profile_s3_path_style">Use path-style URLs</string>
-  <string name="profile_s3_endpoint">Endpoint (optional; defaults to AWS regional endpoint)</string>
+  <string name="profile_storage_type">Type</string>
+  <string name="profile_storage_oss">OSS</string>
+  <string name="profile_s3_region">Region</string>
+  <string name="profile_s3_token">Session token (optional)</string>
+  <string name="profile_s3_path_style">Use path-style addressing</string>
+  <string name="profile_s3_endpoint">HTTPS endpoint (optional)</string>
   <string name="settings_color_theme_celadon">Celadon</string>
   <string name="settings_color_theme_dusk">Dusk</string>
   <string name="settings_color_theme_sand">Warm sand</string>
@@ -368,8 +368,8 @@
     <string name="preview_pdf_extreme_page_hint">This page is unusually long and is scaled to fit. Download the original for details.</string>
   <string name="browser_layout_list">List</string>
   <string name="browser_layout_waterfall">Waterfall</string>
-  <string name="profile_storage_s3">AWS S3</string>
-  <string name="profile_oss_region">OSS Region</string>
+  <string name="profile_storage_s3">S3</string>
+  <string name="profile_oss_region">Region</string>
   <string name="profile_oss_region_hint">Select a region to fill its public HTTPS Endpoint, or edit the address below.</string>
   <string name="profile_oss_region_search">Search region name or code</string>
   <string name="profile_oss_region_custom">Custom Endpoint</string>
@@ -404,10 +404,21 @@
   <string name="oss_region_na_south_1">Mexico</string>
   <string name="oss_region_sa_east_1">São Paulo</string>
   <string name="oss_region_me_east_1">Dubai</string>
-  <string name="browser_view_settings">View settings</string>
-  <string name="browser_layout_section">Layout</string>
-  <string name="browser_files_transfers">Files and transfers</string>
-  <string name="browser_browsing_section">Browsing</string>
-  <string name="browser_configuration_section">Storage configuration</string>
   <string name="browser_more_with_uploads">More actions, %1$d active uploads</string>
+    <string name="browser_switch_account">Switch account</string>
+    <string name="browser_current_account">Current account</string>
+    <string name="browser_select_bucket">Select a Bucket</string>
+  <string name="preview_edit_open">Edit</string>
+  <string name="preview_edit_diff">Review changes</string>
+  <string name="preview_edit_confirm">Confirm update</string>
+  <string name="preview_edit_review_message">Review the changes before updating.</string>
+  <string name="preview_edit_oss_concurrency">OSS checks the version before saving. A concurrent update can still occur after the check.</string>
+  <string name="preview_edit_acl">Saving replaces the object and may change its object-level access permissions.</string>
+  <string name="preview_edit_too_large">The edited text exceeds the size limit.</string>
+  <string name="preview_edit_failed">Update failed. The object may have changed. Check access or reopen the preview.</string>
+  <string name="browser_choose_account">Choose account</string>
+  <string name="browser_add_account">Add account</string>
+  <string name="browser_manage_accounts">Manage accounts</string>
+  <string name="preview_edit_encoding">This text cannot be saved losslessly in its original encoding.</string>
+  <string name="preview_edit_missing_version">The server did not return an ETag. The file cannot be safely updated.</string>
 </resources>

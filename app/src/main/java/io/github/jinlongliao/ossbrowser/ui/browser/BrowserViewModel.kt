@@ -498,8 +498,10 @@ class BrowserViewModel(
      * 空串则回到 bucket 根。
      */
     fun navigateToPath(raw: String) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val snapshot = _state.value
+        val bucket = snapshot.currentBucket ?: return
+        val endpoint = snapshot.currentBucketEndpoint
+        val generation = refreshSeq
         val input = raw.trim().trimStart('/')
         if (input.isEmpty()) {
             _state.value = _state.value.copy(highlightKey = null)
@@ -519,6 +521,13 @@ class BrowserViewModel(
                 throw e
             } catch (_: Throwable) {
                 false
+            }
+            // 左上角可在探测路径时切换账号或 Bucket，旧请求不得更改新的目录。
+            val current = _state.value
+            if (generation != refreshSeq || current.activeProfile != snapshot.activeProfile ||
+                current.currentBucket != bucket || current.currentBucketEndpoint != endpoint
+            ) {
+                return@launch
             }
             if (isFile) {
                 val slash = input.lastIndexOf('/')
@@ -704,17 +713,26 @@ class BrowserViewModel(
                 withContext(Dispatchers.Default) {
                     when (kind) {
                         OssPreviewKind.TEXT -> {
-                            val bytes = service.downloadBytes(
+                            val (bytes, etag) = service.downloadTextSnapshot(
                                 bucket = bucket,
                                 key = item.key,
                                 maxBytes = textPreviewMax,
                                 endpoint = endpoint,
-                                profileId = profile.id
+                                profileId = profile.id,
+                                listedETag = item.etag
                             )
+                            val encoding = TextEditEncoding.detect(bytes, item.displayName)
+                            val content = encoding?.decode(bytes) ?: bytes.toString(Charsets.UTF_8)
                             PreviewState.Text(
                                 key = item.key,
                                 name = item.displayName,
-                                content = bytes.toString(Charsets.UTF_8),
+                                content = content,
+                                bucket = bucket,
+                                endpoint = endpoint,
+                                profileId = profile.id,
+                                etag = etag?.takeIf { it.isNotBlank() },
+                                encoding = encoding,
+                                usesOSS = profile.storageType != StorageType.AWS_S3,
                                 isMarkdown = item.isMarkdownFile()
                             )
                         }
@@ -882,6 +900,57 @@ class BrowserViewModel(
         }
     }
 
+    /** 仅由确认差异页触发。保存使用打开预览时的 ETag，失败保留原文与草稿。 */
+    fun replaceConfirmedText(confirmed: PreviewState.Text, draft: String) {
+        val snapshot = _state.value
+        val original = snapshot.previewState as? PreviewState.Text ?: return
+        if (original !== confirmed) return
+        val etag = original.etag ?: return
+        val bucket = original.bucket
+        val profileId = original.profileId
+        val endpoint = original.endpoint
+        if (snapshot.currentBucket != bucket || snapshot.activeProfile?.id != profileId ||
+            snapshot.currentBucketEndpoint != endpoint
+        ) {
+            _state.value = snapshot.copy(previewState = original.copy(saveError = str(R.string.preview_edit_failed)))
+            return
+        }
+        val generation = previewGeneration
+        if (original.saving || draft == original.content) return
+        val content = original.encoding?.encode(draft)
+        if (content == null) {
+            _state.value = snapshot.copy(previewState = original.copy(saveError = str(R.string.preview_edit_encoding)))
+            return
+        }
+        if (content.size > textPreviewMax) {
+            _state.value = snapshot.copy(previewState = original.copy(saveError = str(R.string.preview_edit_too_large)))
+            return
+        }
+        _state.value = snapshot.copy(previewState = original.copy(saving = true, saveError = null))
+        viewModelScope.launch {
+            val updatedETag = try {
+                service.replaceTextObject(bucket, original.key, etag, content, endpoint, profileId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                Log.e(TAG, "replaceConfirmedText failed, bucket=$bucket, key=${original.key}, profile=$profileId", failure)
+                if (generation == previewGeneration) {
+                    _state.value = _state.value.copy(
+                        previewState = original.copy(saveError = str(R.string.preview_edit_failed))
+                    )
+                }
+                return@launch
+            }
+            if (generation == previewGeneration) {
+                // 保留预览，只用本次 PUT 返回的 ETag 作为下一次编辑的基准。
+                _state.value = _state.value.copy(
+                    previewState = original.copy(content = draft, etag = updatedETag, saving = false, saveError = null)
+                )
+            }
+            refreshChangedObjectDirectories(profileId, bucket, setOf(snapshot.prefix))
+        }
+    }
+
     /** 用户在「预览失败」界面点击重试。 */
     fun retryPreview() {
         lastPreviewItem?.let { preview(it) }
@@ -905,6 +974,7 @@ class BrowserViewModel(
         val current = _state.value
         val bucket = current.currentBucket ?: return
         val endpoint = current.currentBucketEndpoint
+        val profileId = current.activeProfile?.id ?: return
         if (current.activeProfile?.storageType == StorageType.AWS_S3) {
             // S3 没有 OSS ListCname API；仍沿用同一分享弹窗和默认公开地址。
             _state.value = current.copy(customDomainLookup = CustomDomainLookupState(loaded = true))
@@ -913,9 +983,11 @@ class BrowserViewModel(
         if (current.customDomainLookup.loading || current.customDomainLookup.loaded) return
         _state.value = current.copy(customDomainLookup = CustomDomainLookupState(loading = true))
         customDomainsJob = viewModelScope.launch {
-            runCatching { service.listCnames(bucket = bucket, endpoint = endpoint) }
+            runCatching { service.listCnames(bucket = bucket, endpoint = endpoint, profileId = profileId) }
                 .onSuccess { domains ->
-                    if (_state.value.currentBucket != bucket) return@onSuccess
+                    if (_state.value.currentBucket != bucket || _state.value.activeProfile?.id != profileId) {
+                        return@onSuccess
+                    }
                     _state.value = _state.value.copy(
                         customDomainLookup = CustomDomainLookupState(
                             loaded = true,
@@ -926,7 +998,9 @@ class BrowserViewModel(
                 }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
-                    if (_state.value.currentBucket != bucket) return@onFailure
+                    if (_state.value.currentBucket != bucket || _state.value.activeProfile?.id != profileId) {
+                        return@onFailure
+                    }
                     Log.e(
                         TAG,
                         "ListCname failed: bucket=$bucket, endpoint=${endpoint.orEmpty()}",
@@ -962,8 +1036,10 @@ class BrowserViewModel(
         expireHours: Int?,
         customDomain: OssCnameInfo?
     ) {
-        val bucket = _state.value.currentBucket ?: return
-        val endpoint = _state.value.currentBucketEndpoint
+        val current = _state.value
+        val bucket = current.currentBucket ?: return
+        val profileId = current.activeProfile?.id ?: return
+        val endpoint = current.currentBucketEndpoint
         if (mode == ShareLinkMode.SIGNED && (expireHours == null || expireHours !in 1..168)) {
             _state.value = _state.value.copy(task = TaskState.Failed(str(R.string.task_presign_invalid_hours)))
             return
@@ -976,16 +1052,21 @@ class BrowserViewModel(
                         bucket = bucket,
                         key = key,
                         expireSeconds = requireNotNull(expireHours).toLong() * 3600L,
-                        endpoint = endpoint
+                        endpoint = endpoint,
+                        profileId = profileId
                     )
                     ShareLinkMode.PUBLIC -> service.publicObjectUrl(
                         bucket = bucket,
                         key = key,
                         endpoint = endpoint,
-                        cname = customDomain
+                        cname = customDomain,
+                        profileId = profileId
                     )
                 }
             }.onSuccess { url ->
+                if (_state.value.currentBucket != bucket || _state.value.activeProfile?.id != profileId) {
+                    return@onSuccess
+                }
                 _state.value = _state.value.copy(
                     task = null,
                     shareLinkResult = ShareLinkResult(
@@ -1184,8 +1265,21 @@ sealed class PreviewState {
         override val key: String,
         override val name: String,
         val content: String,
+        /** 与正文和版本一起保留的目的 Bucket。 */
+        val bucket: String,
+        /** 获取正文使用的账号路由。 */
+        val endpoint: String?,
+        /** 获取正文使用的账号。 */
+        val profileId: String,
         /** 若为 `true`，UI 可提供「源码 / 富文本」切换，默认以 Markdown 渲染。 */
-        val isMarkdown: Boolean = false
+        val isMarkdown: Boolean = false,
+        /** 同一次 GET 的版本标记。缺少标记时禁止更新。 */
+        val etag: String? = null,
+        /** 原始正文可无损往返时使用该编码保存。 */
+        internal val encoding: TextEditEncoding? = null,
+        val usesOSS: Boolean = false,
+        val saving: Boolean = false,
+        val saveError: String? = null
     ) : PreviewState()
 
     /** HTML 源码；UI 默认静态渲染，完整网页能力必须由用户在当前会话显式开启。 */

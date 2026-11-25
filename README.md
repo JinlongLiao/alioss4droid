@@ -38,6 +38,8 @@
 
 ### Browse & file operations
 
+- Switch accounts at the top-left of Files. The file page has a direct list/grid switch and an editable path field. At 720 dp or wider, the Bucket sidebar stays visible.
+
 - Name-ascending object browsing uses **lazy pagination** (10 per page by default; auto-load on scroll).
 - Folder-first sorting by name or modified time, ascending or descending; changes apply immediately.
 - Time/name-descending sort loads current-directory metadata up to 10,000 entries; name ascending uses lazy pagination.
@@ -52,6 +54,8 @@
   custom Bucket domains returned by OSS, with Copy / Share.
 
 ### File preview
+
+Open a text file such as XML, JSON, YAML, or TXT. UTF-8, BOM-marked UTF-16, and supported XML-declared encodings are preserved when the text can round-trip without loss. Edit it, review the line diff, and confirm the update. S3 checks the original ETag when writing. OSS checks it immediately before writing.
 
 | Kind | Implementation |
 | --- | --- |

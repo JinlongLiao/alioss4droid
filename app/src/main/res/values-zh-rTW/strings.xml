@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OSS Browser for Android</string>
+    <string name="app_name">Alioss4droid</string>
     <string name="app_brand">OSS Browser for Android</string>
     <string name="app_description_short">開源的阿里雲 OSS Android 客戶端</string>
 
@@ -29,8 +29,8 @@
     <string name="nav_settings">設定</string>
 
 
-    <string name="profiles_title">物件儲存設定</string>
-    <string name="profiles_add">新增配置</string>
+    <string name="profiles_title">管理帳號</string>
+    <string name="profiles_add">新增帳號</string>
     <string name="profiles_empty">尚未設定物件儲存帳號，點擊右下角新增。</string>
     <string name="profiles_unnamed">(未命名)</string>
     <string name="profiles_default_bucket">預設 bucket: %1$s</string>
@@ -38,16 +38,16 @@
     <string name="profiles_delete_title">刪除金鑰配置</string>
     <string name="profiles_delete_message">確定要刪除「%1$s」嗎？此操作只會刪除本機配置，不會影響雲端資料。</string>
 
-    <string name="profile_title_new">新增儲存設定</string>
-    <string name="profile_title_edit">編輯儲存設定</string>
-    <string name="profile_field_name_required">配置名稱 *</string>
-    <string name="profile_field_endpoint_required">Endpoint（如 https://oss-cn-hangzhou.aliyuncs.com） *</string>
-    <string name="profile_field_bucket_optional">預設 Bucket（選填，留空則進入後顯示全部 Bucket）</string>
-    <string name="profile_field_ak_required">AccessKey ID *</string>
-    <string name="profile_field_sk_required">AccessKey Secret *</string>
+    <string name="profile_title_new">儲存帳號</string>
+    <string name="profile_title_edit">儲存帳號</string>
+    <string name="profile_field_name_required">名稱</string>
+    <string name="profile_field_endpoint_required">HTTPS 端點</string>
+    <string name="profile_field_bucket_optional">預設 Bucket（可選）</string>
+    <string name="profile_field_ak_required">AccessKey ID</string>
+    <string name="profile_field_sk_required">AccessKey Secret</string>
     <string name="profile_show_secret">顯示 Secret</string>
     <string name="profile_hide_secret">隱藏 Secret</string>
-    <string name="profile_field_note">備註</string>
+    <string name="profile_field_note">備註（可選）</string>
     <string name="profile_save_and_activate">儲存並啟用</string>
 
     <string name="browser_title">OSS 瀏覽器</string>
@@ -56,18 +56,16 @@
     <string name="browser_empty_buckets">此帳號下沒有 Bucket。</string>
     <string name="browser_empty_folder">此目錄為空。</string>
     <string name="browser_item_folder_label">目錄</string>
-    <string name="browser_no_active_profile">請先在「金鑰」頁新增並啟用一個物件儲存設定。</string>
-    <string name="browser_no_profile_title">尚未選擇配置</string>
+    <string name="browser_no_active_profile">新增或選擇一個儲存帳號。</string>
     <string name="browser_no_profile_subtitle">請先在「金鑰」頁新增並啟用</string>
     <string name="browser_bucket_list_subtitle">Bucket 清單</string>
     <string name="browser_bucket_subtitle">bucket: %1$s</string>
-    <string name="browser_go_configure">前往設定</string>
     <string name="browser_jump_path">跳轉到路徑</string>
-    <string name="browser_sort">檔案排序</string>
-    <string name="browser_sort_name_ascending">名稱：正序</string>
-    <string name="browser_sort_name_descending">名稱：倒序</string>
-    <string name="browser_sort_time_ascending">修改時間：由舊到新</string>
-    <string name="browser_sort_time_descending">修改時間：由新到舊</string>
+    <string name="browser_sort">排序方式</string>
+    <string name="browser_sort_name_ascending">名稱正序</string>
+    <string name="browser_sort_name_descending">名稱倒序</string>
+    <string name="browser_sort_time_ascending">最早修改優先</string>
+    <string name="browser_sort_time_descending">最新修改優先</string>
     <string name="browser_more_actions">更多操作</string>
     <string name="browser_mkdir">新增資料夾</string>
     <string name="browser_mkdir_name_label">資料夾名稱</string>
@@ -152,6 +150,8 @@
     <string name="preview_choose_player">選擇播放器</string>
     <string name="preview_toggle_markdown_rich">以 Markdown 繪製</string>
     <string name="preview_toggle_markdown_source">檢視原始碼</string>
+    <string name="preview_html_show_source">檢視原始碼</string>
+    <string name="preview_html_show_page">返回網頁預覽</string>
     <string name="preview_html_switch_full">開啟完整網頁預覽</string>
     <string name="preview_html_switch_safe">返回安全靜態預覽</string>
     <string name="preview_html_full_confirm_title">開啟完整網頁預覽？</string>
@@ -190,7 +190,7 @@
 
     <string name="settings_title">設定</string>
     <string name="settings_section_profiles">物件儲存設定（必填）</string>
-    <string name="settings_profiles_title">物件儲存帳號 / 設定</string>
+    <string name="settings_profiles_title">儲存帳號</string>
     <string name="settings_profiles_active">目前: %1$s · 共 %2$d 條</string>
     <string name="settings_profiles_not_activated">已儲存 %1$d 條，尚未啟用。點擊選擇一條啟用。</string>
     <string name="settings_profiles_none">尚未設定，點擊新增 OSS 或 AWS S3 帳號。</string>
@@ -286,12 +286,12 @@
   <string name="upload_clear_failed">部分本機檔案清理失敗，請再次嘗試。</string>
   <string name="brand_files_title">雲端檔案</string>
   <string name="brand_files_description">瀏覽、預覽與傳輸你的雲端檔案</string>
-  <string name="profile_storage_type">儲存類型</string>
-  <string name="profile_storage_oss">阿里雲 OSS</string>
-  <string name="profile_s3_region">AWS Region（必填）</string>
-  <string name="profile_s3_token">SessionToken（臨時憑證可選）</string>
-  <string name="profile_s3_path_style">使用路徑形式存取 Bucket</string>
-  <string name="profile_s3_endpoint">Endpoint（可選，預設使用 AWS 區域端點）</string>
+  <string name="profile_storage_type">類型</string>
+  <string name="profile_storage_oss">OSS</string>
+  <string name="profile_s3_region">區域</string>
+  <string name="profile_s3_token">Session Token（可選）</string>
+  <string name="profile_s3_path_style">使用 path-style</string>
+  <string name="profile_s3_endpoint">HTTPS 端點（可選）</string>
   <string name="settings_color_theme_celadon">青瓷</string>
   <string name="settings_color_theme_dusk">暮紫</string>
   <string name="settings_color_theme_sand">暖砂</string>
@@ -352,8 +352,8 @@
     <string name="preview_pdf_extreme_page_hint">此頁面比例特殊，已整體縮小顯示。查看細節請下載原始檔案。</string>
   <string name="browser_layout_list">列表</string>
   <string name="browser_layout_waterfall">雙列瀑布流</string>
-  <string name="profile_storage_s3">AWS S3</string>
-  <string name="profile_oss_region">OSS 地域</string>
+  <string name="profile_storage_s3">S3</string>
+  <string name="profile_oss_region">區域</string>
   <string name="profile_oss_region_hint">選擇地域後自動填寫公網 HTTPS Endpoint；也可在下方手動修改位址。</string>
   <string name="profile_oss_region_search">搜尋地域名稱或代碼</string>
   <string name="profile_oss_region_custom">自訂 Endpoint</string>
@@ -388,10 +388,21 @@
   <string name="oss_region_na_south_1">墨西哥</string>
   <string name="oss_region_sa_east_1">巴西聖保羅</string>
   <string name="oss_region_me_east_1">阿聯酋杜拜</string>
-  <string name="browser_view_settings">檢視設定</string>
-  <string name="browser_layout_section">顯示方式</string>
-  <string name="browser_files_transfers">檔案與傳輸</string>
-  <string name="browser_browsing_section">瀏覽檢視</string>
-  <string name="browser_configuration_section">儲存設定</string>
   <string name="browser_more_with_uploads">更多操作，%1$d 項上傳進行中</string>
+    <string name="browser_switch_account">切換帳號</string>
+    <string name="browser_current_account">目前帳號</string>
+    <string name="browser_select_bucket">選擇 Bucket</string>
+  <string name="preview_edit_open">編輯</string>
+  <string name="preview_edit_diff">查看差異</string>
+  <string name="preview_edit_confirm">確認更新</string>
+  <string name="preview_edit_review_message">確認更新前，請檢查以下差異。</string>
+  <string name="preview_edit_oss_concurrency">OSS 儲存前驗證版本，驗證後仍可能發生並行更新。</string>
+  <string name="preview_edit_acl">儲存會取代同名物件，可能改變物件層級的存取權限。</string>
+  <string name="preview_edit_too_large">編輯後的文字超過大小上限。</string>
+  <string name="preview_edit_failed">更新失敗。物件可能已變更，請檢查權限或重新開啟預覽。</string>
+  <string name="browser_choose_account">選擇帳號</string>
+  <string name="browser_add_account">新增帳號</string>
+  <string name="browser_manage_accounts">管理帳號</string>
+  <string name="preview_edit_encoding">文字無法使用原編碼無損儲存。</string>
+  <string name="preview_edit_missing_version">伺服器未傳回 ETag，無法安全更新檔案。</string>
 </resources>

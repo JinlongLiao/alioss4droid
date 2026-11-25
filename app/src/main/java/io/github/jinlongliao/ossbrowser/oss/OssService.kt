@@ -17,6 +17,14 @@ package io.github.jinlongliao.ossbrowser.oss
 
 import android.util.Xml
 import io.github.jinlongliao.ossbrowser.data.StorageType
+import com.alibaba.sdk.android.oss.common.HttpMethod
+import com.alibaba.sdk.android.oss.common.auth.OSSPlainTextAKSKCredentialProvider
+import com.alibaba.sdk.android.oss.common.auth.OSSStsTokenCredentialProvider
+import com.alibaba.sdk.android.oss.common.utils.HttpUtil
+import com.alibaba.sdk.android.oss.internal.RequestMessage
+import com.alibaba.sdk.android.oss.signer.OSSSignerBase
+import com.alibaba.sdk.android.oss.signer.OSSSignerParams
+import com.alibaba.sdk.android.oss.signer.SignVersion
 import com.alibaba.sdk.android.oss.OSSClient
 import com.alibaba.sdk.android.oss.ClientException
 import com.alibaba.sdk.android.oss.ServiceException
@@ -28,10 +36,13 @@ import com.alibaba.sdk.android.oss.internal.OSSAsyncTask
 import com.alibaba.sdk.android.oss.model.CopyObjectRequest
 import com.alibaba.sdk.android.oss.model.DeleteObjectRequest
 import com.alibaba.sdk.android.oss.model.GetObjectRequest
+import com.alibaba.sdk.android.oss.model.HeadObjectRequest
+import com.alibaba.sdk.android.oss.model.ObjectMetadata
 import com.alibaba.sdk.android.oss.model.ListBucketsRequest
 import com.alibaba.sdk.android.oss.model.ListObjectsRequest
 import com.alibaba.sdk.android.oss.model.PutObjectRequest
 import io.github.jinlongliao.ossbrowser.util.FileUtils
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -44,12 +55,9 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
-import java.net.URLEncoder
 import java.util.Date
-import java.util.Base64
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * 对象存储操作入口，按配置协议分发到 AWS S3 或 OSS。OSS 业务封装：全部在 IO 线程执行，异常抛出给调用方。目录模型：以 `/` 结尾的 key 表示目录。
@@ -150,9 +158,6 @@ class OssService(private val provider: OssClientProvider) {
     companion object {
         /** ListCname 错误响应的最大读取字符数，仅用于提取非敏感错误码。 */
         private const val MAX_ERROR_RESPONSE_LENGTH = 8_192
-
-        /** ListCname 预签名 URL 的有效期，单位为秒。 */
-        private const val LIST_CNAME_URL_TTL_SECONDS = 60L
 
         /** 文件夹优先、名称升序（Locale-aware，不区分大小写）。 */
         val FolderFirstByName: Comparator<OssObjectItem> = Comparator { a, b ->
@@ -414,10 +419,41 @@ class OssService(private val provider: OssClientProvider) {
         maxBytes: Long,
         endpoint: String? = null,
         profileId: String? = null
-    ): ByteArray = withContext(Dispatchers.IO) {
-        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.downloadS3Bytes(bucket, key, maxBytes) }
+    ): ByteArray = downloadTextSnapshot(bucket, key, maxBytes, endpoint, profileId, recoverVersion = false).first
+
+    /** 缺失 ETag 时补取元数据，再用条件 GET 绑定正文；普通预览无需补取。 */
+    suspend fun downloadTextSnapshot(
+        bucket: String,
+        key: String,
+        maxBytes: Long,
+        endpoint: String? = null,
+        profileId: String? = null,
+        recoverVersion: Boolean = true,
+        listedETag: String? = null
+    ): Pair<ByteArray, String?> = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint, profileId)?.let {
+            return@withContext it.downloadS3TextSnapshot(bucket, key, maxBytes, recoverVersion, listedETag)
+        }
         val (client, _) = bucketClient(endpoint, profileId)
-        val result = client.getObject(GetObjectRequest(bucket, key))
+        val initial = readOssTextSnapshot(client, GetObjectRequest(bucket, key), maxBytes)
+        if (!recoverVersion || initial.second != null) return@withContext initial
+        resolveTextSnapshotVersion(initial, listedETag, readVersion = {
+            val head = client.headObject(HeadObjectRequest(bucket, key))
+            strongTextETag(head.metadata?.eTag)
+                ?: head.responseHeader?.entries?.firstOrNull { it.key.equals("ETag", true) }?.value
+        }) { version ->
+            val request = GetObjectRequest(bucket, key).apply {
+                requestHeaders = mapOf("If-Match" to version, "Accept-Encoding" to "identity")
+            }
+            readOssTextSnapshot(client, request, maxBytes)
+        }
+    }
+
+    /** 读取单次 GET 的正文与同一响应的有效版本。 */
+    private suspend fun readOssTextSnapshot(
+        client: OSSClient, request: GetObjectRequest, maxBytes: Long
+    ): Pair<ByteArray, String?> {
+        val result = client.getObject(request)
         val contentLength = result.contentLength
         if (contentLength in 1..Long.MAX_VALUE && contentLength > maxBytes) {
             runCatching { result.objectContent.close() }
@@ -425,7 +461,7 @@ class OssService(private val provider: OssClientProvider) {
                 "文件过大（${FileUtils.humanSize(contentLength)}），超过预览上限 ${FileUtils.humanSize(maxBytes)}。"
             )
         }
-        result.objectContent.use { input ->
+        return result.objectContent.use { input ->
             val buf = ByteArray(64 * 1024)
             val out = java.io.ByteArrayOutputStream()
             var total = 0L
@@ -441,8 +477,60 @@ class OssService(private val provider: OssClientProvider) {
                 }
                 out.write(buf, 0, n)
             }
-            out.toByteArray()
+            val responseTag = result.responseHeader?.entries?.firstOrNull { it.key.equals("ETag", true) }?.value
+            out.toByteArray() to (strongTextETag(result.metadata?.eTag) ?: strongTextETag(responseTag))
         }
+    }
+
+    /**
+     * 仅供用户确认差异后写回。OSS 先复查 ETag，保留常用元数据后替换原 key。
+     * @see <a href="https://www.alibabacloud.com/help/en/oss/user-guide/0017-00000245">OSS PutObject 条件限制</a>
+     */
+    suspend fun replaceTextObject(
+        bucket: String, key: String, etag: String, content: ByteArray, endpoint: String?, profileId: String
+    ): String? = withContext(Dispatchers.IO) {
+        provider.s3Storage(endpoint, profileId)?.let {
+            return@withContext it.replaceS3TextObject(bucket, key, etag, content)
+        }
+        val (client, _) = bucketClient(endpoint, profileId)
+        val head = client.headObject(HeadObjectRequest(bucket, key))
+        val previous = head.metadata
+        val responseTag = head.responseHeader?.entries?.firstOrNull { it.key.equals("ETag", true) }?.value
+        val currentVersion = strongTextETag(previous.eTag) ?: strongTextETag(responseTag)
+        check(currentVersion == null || currentVersion == etag) { "远端文件已更新，请重新打开预览。" }
+        var contentEncoding = previous.contentEncoding
+        if (currentVersion == null || !contentEncoding.isIdentityOssEncoding()) {
+            // OSS 可能按传输请求动态压缩，Android SDK 的 HEAD 无法指定 Accept-Encoding。
+            // 用不接受动态压缩的条件 GET 核对实际对象编码，响应体不参与写回。
+            val conditional = client.getObject(GetObjectRequest(bucket, key).apply {
+                requestHeaders = mapOf("If-Match" to etag, "Accept-Encoding" to "identity")
+            })
+            conditional.objectContent.use {
+                val returned = conditional.responseHeader?.entries
+                    ?.firstOrNull { it.key.equals("ETag", true) }?.value
+                val verifiedVersion = strongTextETag(conditional.metadata?.eTag) ?: strongTextETag(returned)
+                check(verifiedVersion == null || verifiedVersion == etag) { "远端文件已更新，请重新打开预览。" }
+                contentEncoding = conditional.metadata?.contentEncoding ?: conditional.responseHeader?.entries
+                    ?.firstOrNull { it.key.equals("Content-Encoding", true) }?.value
+            }
+        }
+        val headers = previous.rawMetadata.entries.associate { (name, value) -> name.lowercase() to value }
+        check(contentEncoding.isIdentityOssEncoding() &&
+            (headers["x-oss-tagging-count"]?.toString()?.toIntOrNull() ?: 0) == 0
+        ) { "暂不支持更新带内容编码或对象标签的文本。" }
+        val metadata = ObjectMetadata().apply {
+            userMetadata = previous.userMetadata
+            val retained = listOf(
+                "Content-Type", "Cache-Control", "Content-Disposition", "Expires", "x-oss-storage-class",
+                "x-oss-server-side-encryption", "x-oss-server-side-data-encryption",
+                "x-oss-server-side-encryption-key-id"
+            )
+            retained.forEach { name -> headers[name.lowercase()]?.let { setHeader(name, it) } }
+        }
+        currentCoroutineContext().ensureActive()
+        val updated = client.putObject(PutObjectRequest(bucket, key, content, metadata))
+        val updatedHeader = updated.responseHeader?.entries?.firstOrNull { it.key.equals("ETag", true) }?.value
+        strongTextETag(updated.eTag) ?: strongTextETag(updatedHeader)
     }
 
     /**
@@ -517,10 +605,11 @@ class OssService(private val provider: OssClientProvider) {
         bucket: String,
         key: String,
         endpoint: String? = null,
-        cname: OssCnameInfo? = null
+        cname: OssCnameInfo? = null,
+        profileId: String? = null
     ): String = withContext(Dispatchers.IO) {
-        provider.s3Storage(endpoint)?.let { return@withContext it.publicS3ObjectUrl(bucket, key) }
-        val (client, _) = bucketClient(endpoint)
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext it.publicS3ObjectUrl(bucket, key) }
+        val (client, _) = bucketClient(endpoint, profileId)
         val defaultUrl = client.presignPublicObjectURL(bucket, key)
         if (cname == null) {
             defaultUrl
@@ -532,7 +621,7 @@ class OssService(private val provider: OssClientProvider) {
     /**
      * 查询 Bucket 已启用的自定义域名。
      *
-     * Android SDK 2.9.x 未公开封装 ListCname，因此先使用 SDK 的预签名能力构造短时有效的
+     * Android SDK 2.9.x 未公开封装 ListCname，因此复用 SDK 的 V4 签名构造短时有效的
      * `GET /?cname` 请求，再直接读取官方 XML 响应。签名 URL 不会进入异常文本或日志。
      * RAM 用户需要 `oss:ListCname` 权限；未绑定域名时 OSS 返回 404，本方法按空列表处理。
      *
@@ -540,22 +629,25 @@ class OssService(private val provider: OssClientProvider) {
      * @param endpoint Bucket 所在地域的公网 endpoint；为空时使用当前 profile 的 endpoint。
      * @return 状态为 `Enabled` 的自定义域名，保持 OSS 返回顺序。
      * @throws IllegalStateException 网络失败、权限不足或响应无法解析时抛出，消息包含状态码、
-     * 请求 ID 和不含凭证的响应体，供界面提示和问题定位。
+     * 请求 ID 和服务错误码，供界面提示和问题定位。
      * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/listcname">阿里云 OSS ListCname</a>
      */
     suspend fun listCnames(
         bucket: String,
-        endpoint: String? = null
+        endpoint: String? = null,
+        profileId: String? = null
     ): List<OssCnameInfo> = withContext(Dispatchers.IO) {
-        provider.s3Storage(endpoint)?.let { return@withContext emptyList() }
-        val (client, profile) = bucketClient(endpoint)
-        val expiresAtSeconds = System.currentTimeMillis() / 1_000L + LIST_CNAME_URL_TTL_SECONDS
+        provider.s3Storage(endpoint, profileId)?.let { return@withContext emptyList() }
+        val (client, profile) = bucketClient(endpoint, profileId)
+        val baseUrl = client.presignPublicObjectURL(bucket, "")
+        val region = resolveListCnameRegion(baseUrl, profile.region)
         val signedUrl = createListCnameSignedUrl(
-            baseUrl = client.presignPublicObjectURL(bucket, ""),
+            baseUrl = baseUrl,
             bucket = bucket,
+            region = region,
             accessKeyId = profile.accessKeyId,
             accessKeySecret = profile.accessKeySecret,
-            expiresAtSeconds = expiresAtSeconds
+            sessionToken = profile.sessionToken
         )
         val connection = URL(signedUrl).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
@@ -601,6 +693,7 @@ class OssService(private val provider: OssClientProvider) {
         var domain = ""
         var status = ""
         var certificateStatus = ""
+        var wildcard = false
         while (parser.eventType != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 org.xmlpull.v1.XmlPullParser.START_TAG -> when (parser.name) {
@@ -609,9 +702,11 @@ class OssService(private val provider: OssClientProvider) {
                         domain = ""
                         status = ""
                         certificateStatus = ""
+                        wildcard = false
                     }
                     "Certificate" -> if (inCname) inCertificate = true
                     "Domain" -> if (inCname) domain = parser.nextText().trim()
+                    "IsWildCard" -> if (inCname) wildcard = parser.nextText().trim().equals("true", ignoreCase = true)
                     "Status" -> if (inCname) {
                         val value = parser.nextText().trim()
                         if (inCertificate) certificateStatus = value else status = value
@@ -620,7 +715,9 @@ class OssService(private val provider: OssClientProvider) {
                 org.xmlpull.v1.XmlPullParser.END_TAG -> when (parser.name) {
                     "Certificate" -> inCertificate = false
                     "Cname" -> {
-                        if (domain.isNotBlank() && status.equals("Enabled", ignoreCase = true)) {
+                        if (!wildcard && !domain.startsWith("*.") && domain.isNotBlank() &&
+                            status.equals("Enabled", ignoreCase = true)
+                        ) {
                             result += OssCnameInfo(
                                 domain = domain,
                                 httpsEnabled = certificateStatus.equals("Enabled", ignoreCase = true)
@@ -649,47 +746,89 @@ class OssService(private val provider: OssClientProvider) {
     )
 }
 
+/** 无 HTTP 内容编码或显式 identity 的对象可以原样写回文本字节。 */
+internal fun String?.isIdentityOssEncoding(): Boolean = isNullOrBlank() || trim().equals("identity", ignoreCase = true)
+
+/** 只接受可用作 If-Match 的单一强版本标记。 */
+internal fun strongTextETag(raw: String?): String? {
+    val value = raw?.trim()?.removeSurrounding("\"") ?: return null
+    if (value.isEmpty() || value == "*" || value.startsWith("W/") || value.any { it !in '!'..'~' || it == '"' }) {
+        return null
+    }
+    return "\"$value\""
+}
+
+/** HEAD 无版本时可用列表版本发起条件读取，只有服务端接受该条件才生成可写快照。 */
+internal suspend fun resolveTextSnapshotVersion(
+    initial: Pair<ByteArray, String?>,
+    listedETag: String? = null,
+    readVersion: suspend () -> String?,
+    readMatching: suspend (String) -> Pair<ByteArray, String?>
+): Pair<ByteArray, String?> {
+    try {
+        val headVersion = try {
+            strongTextETag(readVersion())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        val version = headVersion ?: strongTextETag(listedETag) ?: return initial
+        val (data, returnedVersion) = readMatching(version)
+        return if (returnedVersion == null || strongTextETag(returnedVersion) == version) data to version else initial
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        // 元数据缺失或条件失败时保留原快照供用户阅读。
+        return initial
+    }
+}
+
+/** ListCname 预签名 URL 的有效期，单位为秒。 */
+private const val LIST_CNAME_URL_TTL_SECONDS = 60L
+
+/** 根据请求使用的公网或内网端点确定地域，跨地域 Bucket 不沿用旧账号地域。 */
+internal fun resolveListCnameRegion(baseUrl: String, configuredRegion: String): String {
+    val host = URI(baseUrl).host.orEmpty()
+    return Regex("(?:^|\\.)oss-([a-z0-9-]+)\\.aliyuncs\\.com$", RegexOption.IGNORE_CASE)
+        .find(host)?.groupValues?.get(1)?.lowercase()?.removeSuffix("-internal")
+        ?: configuredRegion.takeIf { it.isNotBlank() }
+        ?: error("ListCname 需要可识别的 OSS 地域，请使用 Bucket 的地域 Endpoint。")
+}
+
 /**
- * 生成 ListCname 的 OSS V1 查询签名 URL。
- *
- * OSS Android SDK 2.9.13 的签名子资源白名单未包含 `cname`：直接调用
- * `presignConstrainedObjectURL` 会把参数放入 URL，却不会把它纳入签名。这里严格按照
- * OSS V1 的 CanonicalizedResource 规则，把 `/$bucket/?cname` 放入 HMAC-SHA1 原文。
- * 该方法只返回短期 URL，调用方不得记录 URL，因为查询参数含 AccessKeyId 与签名。
- *
- * @param baseUrl SDK 根据 endpoint 与 Bucket 生成的公开根 URL，不应包含查询参数。
- * @param bucket 待查询的 Bucket 名称。
- * @param accessKeyId 当前配置的 AccessKey ID。
- * @param accessKeySecret 当前配置的 AccessKey Secret；只用于本地签名，不写入 URL。
- * @param expiresAtSeconds URL 失效时刻，Unix 秒。
- * @return 已包含 `cname`、AccessKeyId、Expires 与 Signature 的请求 URL。
- * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/listcname">OSS ListCname</a>
- * @see <a href="https://help.aliyun.com/zh/oss/developer-reference/include-signatures-in-the-authorization-header">OSS V1 CanonicalizedResource</a>
+ * 使用 SDK 的 V4 签名器签入 cname 子资源，并保留 SDK 已解析的请求地址。
+ * 返回值含短期签名凭据，仅用于发送请求。
+ * @see <a href="https://www.alibabacloud.com/help/en/oss/developer-reference/add-signatures-to-urls">OSS V4 URL 签名</a>
  */
 internal fun createListCnameSignedUrl(
     baseUrl: String,
     bucket: String,
+    region: String,
     accessKeyId: String,
     accessKeySecret: String,
-    expiresAtSeconds: Long
+    sessionToken: String = ""
 ): String {
-    require(!baseUrl.contains('?')) { "ListCname baseUrl 不应包含查询参数" }
-    val canonicalString = "GET\n\n\n$expiresAtSeconds\n/$bucket/?cname"
-    val signer = Mac.getInstance("HmacSHA1").apply {
-        init(SecretKeySpec(accessKeySecret.toByteArray(Charsets.UTF_8), "HmacSHA1"))
+    val endpoint = URI(baseUrl)
+    require(endpoint.scheme == "https" && endpoint.rawQuery == null && endpoint.rawFragment == null) {
+        "ListCname requires an HTTPS bucket endpoint"
     }
-    val signature = Base64.getEncoder().encodeToString(
-        signer.doFinal(canonicalString.toByteArray(Charsets.UTF_8))
-    )
-    return buildString {
-        append(baseUrl)
-        append("?cname&OSSAccessKeyId=")
-        append(urlEncodeQueryValue(accessKeyId))
-        append("&Expires=")
-        append(expiresAtSeconds)
-        append("&Signature=")
-        append(urlEncodeQueryValue(signature))
+    val credentials = if (sessionToken.isEmpty()) {
+        OSSPlainTextAKSKCredentialProvider(accessKeyId, accessKeySecret)
+    } else {
+        OSSStsTokenCredentialProvider(accessKeyId, accessKeySecret, sessionToken)
     }
+    val context = OSSSignerParams("/$bucket/", credentials).apply {
+        product = "oss"
+        this.region = region
+        expiration = LIST_CNAME_URL_TTL_SECONDS
+    }
+    val request = RequestMessage().apply {
+        method = HttpMethod.GET
+        addParameter("cname", "")
+    }
+    OSSSignerBase.createRequestPresigner(SignVersion.V4, context).presign(request)
+    return baseUrl + "?" + HttpUtil.paramToQueryString(request.parameters, Charsets.UTF_8.name())
 }
 
 /**
@@ -706,7 +845,3 @@ internal fun extractOssErrorCode(responseBody: String): String? =
         .find(responseBody)
         ?.groupValues
         ?.getOrNull(1)
-
-/** 将单个查询参数值编码为 UTF-8，空格固定使用 `%20`。 */
-private fun urlEncodeQueryValue(value: String): String =
-    URLEncoder.encode(value, Charsets.UTF_8.name()).replace("+", "%20")

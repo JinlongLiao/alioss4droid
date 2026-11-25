@@ -131,7 +131,7 @@ fun ProfileEditScreen(
                         }
                     }) {
                         Text((if (storageType == type) "✓ " else "") +
-                            if (type == StorageType.OSS) stringResource(R.string.profile_storage_oss) else "AWS S3")
+                            stringResource(if (type == StorageType.OSS) R.string.profile_storage_oss else R.string.profile_storage_s3))
                     }
                 }
             }

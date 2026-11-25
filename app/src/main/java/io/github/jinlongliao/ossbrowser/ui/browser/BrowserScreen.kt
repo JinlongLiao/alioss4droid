@@ -26,12 +26,15 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,6 +59,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -65,10 +69,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+import androidx.compose.material.icons.outlined.ViewList
+import androidx.compose.material.icons.outlined.ViewModule
 import androidx.compose.material.icons.automirrored.filled.DriveFileMove
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
@@ -88,7 +103,6 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -98,6 +112,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -116,14 +131,17 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
@@ -135,7 +153,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -156,10 +177,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import io.github.jinlongliao.ossbrowser.OssBrowserApp
-import io.github.jinlongliao.ossbrowser.ui.CloudPageHeader
 import io.github.jinlongliao.ossbrowser.R
 import io.github.jinlongliao.ossbrowser.ui.TonalIcon
 import io.github.jinlongliao.ossbrowser.oss.StorageIcons
+import io.github.jinlongliao.ossbrowser.data.OssProfile
+import io.github.jinlongliao.ossbrowser.data.StorageType
 import io.github.jinlongliao.ossbrowser.oss.OssBucketInfo
 import io.github.jinlongliao.ossbrowser.oss.OssCnameInfo
 import io.github.jinlongliao.ossbrowser.util.PresentationSlidePreview
@@ -178,12 +200,15 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrowserScreen(
-    onOpenProfiles: () -> Unit,
+    onAddProfile: () -> Unit,
+    onManageAccounts: () -> Unit,
     vm: BrowserViewModel = viewModel(factory = BrowserViewModel.Factory)
 ) {
     val state by vm.state.collectAsState()
     val settingsVm: SettingsViewModel = viewModel(factory = SettingsViewModel.Factory)
     val settings by settingsVm.state.collectAsState()
+    val profileRepository = OssBrowserApp.instance.profileRepository
+    val profileState by profileRepository.state.collectAsState()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     // 任务来源独立于浏览器状态；刷新、切目录和重建页面都不会清空任务。
@@ -318,46 +343,24 @@ fun BrowserScreen(
         topBar = {
             AppTopBar(
                 title = {
-                    Column {
-                        Text(
-                            state.activeProfile?.name
-                                ?: stringResource(R.string.browser_no_profile_title),
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        val subtitle = when {
-                            state.activeProfile == null ->
-                                stringResource(R.string.browser_no_profile_subtitle)
-                            state.currentBucket != null ->
-                                stringResource(R.string.browser_bucket_subtitle, state.currentBucket!!)
-                            else ->
-                                stringResource(R.string.browser_bucket_list_subtitle)
-                        }
-                        Text(
-                            subtitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    BrowserAccountMenu(
+                        activeProfile = state.activeProfile,
+                        profiles = profileState.profiles,
+                        onActivate = profileRepository::activate,
+                        onAdd = onAddProfile,
+                        onManage = onManageAccounts
+                    )
                 },
                 actions = {
                     BrowserToolbarActions(
                         hasActiveProfile = state.activeProfile != null,
                         inBucketView = inBucketView,
-                        layoutMode = layoutMode,
                         sortField = settings.ossObjectSortField,
                         sortDirection = settings.ossObjectSortDirection,
                         activeUploadCount = uploadTasks.count { it.status.isUploadActive() },
                         onRefresh = vm::refresh,
-                        onLayoutChange = settingsVm::setBrowserLayoutMode,
                         onSortChange = vm::updateObjectSort,
-                        onUploadFile = { pickFile.launch(arrayOf("*/*")) },
                         onCreateFolder = { dialog = BrowserDialog.Mkdir },
-                        onJumpToPath = { dialog = BrowserDialog.NavigatePath },
-                        onOpenProfiles = onOpenProfiles,
                         onOpenUploads = { showUploads = true }
                     )
                 }
@@ -365,147 +368,175 @@ fun BrowserScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            if (state.activeProfile == null) {
-                CloudPageHeader(
-                    title = stringResource(R.string.brand_files_title),
-                    subtitle = stringResource(R.string.brand_files_description)
-                )
-            }
-            if (inBucketView) {
-                Breadcrumb(
-                    currentBucket = state.currentBucket!!,
-                    prefix = state.prefix,
-                    onBackToBuckets = { vm.exitBucket() },
-                    onJumpInBucket = vm::jumpTo
-                )
-            }
-
-            if (state.task is TaskState.Progress) {
-                val p = state.task as TaskState.Progress
-                val frac = if (p.total > 0) p.current.toFloat() / p.total.toFloat() else 0f
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    Text("${p.label}  ${FileUtils.humanSize(p.current)} / ${FileUtils.humanSize(p.total)}",
-                        style = MaterialTheme.typography.bodySmall)
-                    LinearProgressIndicator(
-                        progress = { frac.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth()
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+            val wide = maxWidth >= 720.dp && state.activeProfile != null
+            Row(Modifier.fillMaxSize()) {
+                if (wide) {
+                    BrowserBucketSidebar(
+                        buckets = state.buckets,
+                        defaultBucket = state.activeProfile?.bucket.orEmpty(),
+                        selectedBucket = state.currentBucket,
+                        onSelectBucket = vm::selectBucket
                     )
+                    VerticalDivider()
                 }
-            }
-
-            state.errorMessage?.let { msg ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    onClick = { vm.clearError() }
-                ) {
-                    Text(
-                        stringResource(R.string.browser_error_prefix, msg),
-                        modifier = Modifier.padding(12.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-
-            when {
-                state.activeProfile == null -> EmptyHint(
-                    stringResource(R.string.browser_no_active_profile)
-                ) {
-                    TextButton(onClick = onOpenProfiles) {
-                        Text(stringResource(R.string.browser_go_configure))
-                    }
-                }
-                // === Bucket 列表视图 ===
-                !inBucketView -> when {
-                    state.loading && state.buckets.isEmpty() -> EmptyHint(
-                        stringResource(R.string.browser_loading_buckets)
-                    ) {
-                        TextButton(onClick = { vm.cancelLoading() }) {
-                            Text(stringResource(R.string.common_cancel))
+                Column(Modifier.weight(1f).fillMaxSize()) {
+                    val currentBucket = state.currentBucket
+                    if (currentBucket != null) {
+                        key(state.activeProfile?.id, currentBucket) {
+                            BrowserDirectoryHeader(
+                                bucket = currentBucket,
+                                prefix = state.prefix,
+                                layoutMode = layoutMode,
+                                onLayoutChange = settingsVm::setBrowserLayoutMode,
+                                onBack = { vm.goBack() },
+                                onSubmitPath = vm::navigateToPath,
+                                onUpload = { pickFile.launch(arrayOf("*/*")) }
+                            )
+                        }
+                    } else if (!wide && state.activeProfile != null) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                stringResource(R.string.browser_bucket_list_subtitle),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            BrowserLayoutToggle(layoutMode, settingsVm::setBrowserLayoutMode)
                         }
                     }
-                    state.buckets.isEmpty() -> EmptyHint(stringResource(R.string.browser_empty_buckets)) {
-                        TextButton(onClick = { vm.refresh() }) {
-                            Text(stringResource(R.string.common_refresh))
+                    if (state.task is TaskState.Progress) {
+                        val p = state.task as TaskState.Progress
+                        val frac = if (p.total > 0) p.current.toFloat() / p.total.toFloat() else 0f
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text("${p.label}  ${FileUtils.humanSize(p.current)} / ${FileUtils.humanSize(p.total)}",
+                                style = MaterialTheme.typography.bodySmall)
+                            LinearProgressIndicator(
+                                progress = { frac.coerceIn(0f, 1f) },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
-                    else -> BrowserItemsLayout(
-                        entries = state.buckets,
-                        layoutMode = layoutMode,
-                        itemKey = { it.name },
-                        bottomPadding = 24.dp
-                    ) { bucket, waterfall ->
-                        BucketRow(
-                            bucket = bucket,
-                            waterfall = waterfall,
-                            onOpen = { vm.selectBucket(bucket.name, bucket.extranetEndpoint) }
+
+                    state.errorMessage?.let { msg ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            onClick = { vm.clearError() }
+                        ) {
+                            Text(
+                                stringResource(R.string.browser_error_prefix, msg),
+                                modifier = Modifier.padding(12.dp),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+
+                    when {
+                        state.activeProfile == null -> EmptyHint(
+                            stringResource(R.string.browser_no_active_profile)
+                        ) {
+                            TextButton(onClick = onAddProfile) {
+                                Text(stringResource(R.string.browser_add_account))
+                            }
+                        }
+                        wide && !inBucketView && state.buckets.isNotEmpty() -> EmptyHint(
+                            stringResource(R.string.browser_select_bucket)
                         )
-                    }
-                }
-                // === Object 列表视图 ===
-                state.loading && state.items.isEmpty() -> EmptyHint(
-                    stringResource(R.string.browser_loading)
-                ) {
-                    TextButton(onClick = { vm.cancelLoading() }) {
-                        Text(stringResource(R.string.common_cancel))
-                    }
-                }
-                state.items.isEmpty() -> EmptyHint(stringResource(R.string.browser_empty_folder)) {
-                    TextButton(onClick = { vm.refresh() }) {
-                        Text(stringResource(R.string.common_refresh))
-                    }
-                }
-                else -> BrowserItemsLayout(
-                    entries = state.items,
-                    layoutMode = layoutMode,
-                    itemKey = { it.key },
-                    bottomPadding = 24.dp,
-                    listState = listState,
-                    waterfallState = waterfallState,
-                    footer = {
-                        ListFooter(
-                            hasMore = state.nextMarker != null,
-                            loadingMore = state.loadingMore,
-                            onLoadMore = { vm.loadMore() }
-                        )
-                    }
-                ) { item, waterfall ->
-                    ObjectRow(
-                        item = item,
-                        waterfall = waterfall,
-                        highlighted = item.key == state.highlightKey,
-                        onOpen = {
-                            if (item is OssObjectItem.Folder) vm.enterFolder(item.key)
-                        },
-                        onPreview = {
-                            if (item is OssObjectItem.File) vm.preview(item)
-                        },
-                        onDownload = {
-                            if (item is OssObjectItem.File) {
-                                pendingDownload = item
-                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                    type = "*/*"
-                                    putExtra(Intent.EXTRA_TITLE, item.displayName)
+                        // === Bucket 列表视图 ===
+                        !inBucketView -> when {
+                            state.loading && state.buckets.isEmpty() -> EmptyHint(
+                                stringResource(R.string.browser_loading_buckets)
+                            ) {
+                                TextButton(onClick = { vm.cancelLoading() }) {
+                                    Text(stringResource(R.string.common_cancel))
                                 }
-                                createFile.launch(intent)
                             }
-                        },
-                        onPresign = {
-                            if (item is OssObjectItem.File) {
-                                vm.clearCustomDomains()
-                                dialog = BrowserDialog.ShareLink(item)
+                            state.buckets.isEmpty() -> EmptyHint(stringResource(R.string.browser_empty_buckets)) {
+                                TextButton(onClick = { vm.refresh() }) {
+                                    Text(stringResource(R.string.common_refresh))
+                                }
                             }
-                        },
-                        onDelete = {
-                            if (settings.confirmDestructiveOps) {
-                                dialog = BrowserDialog.ConfirmDelete(item)
-                            } else {
-                                vm.delete(item.key)
+                            else -> BrowserItemsLayout(
+                                entries = state.buckets,
+                                layoutMode = layoutMode,
+                                itemKey = { it.name },
+                                bottomPadding = 24.dp
+                            ) { bucket, waterfall ->
+                                BucketRow(
+                                    bucket = bucket,
+                                    waterfall = waterfall,
+                                    onOpen = { vm.selectBucket(bucket.name, bucket.extranetEndpoint) }
+                                )
                             }
-                        },
-                        onMove = { dialog = BrowserDialog.Move(item) }
-                    )
+                        }
+                        // === Object 列表视图 ===
+                        state.loading && state.items.isEmpty() -> EmptyHint(
+                            stringResource(R.string.browser_loading)
+                        ) {
+                            TextButton(onClick = { vm.cancelLoading() }) {
+                                Text(stringResource(R.string.common_cancel))
+                            }
+                        }
+                        state.items.isEmpty() -> EmptyHint(stringResource(R.string.browser_empty_folder)) {
+                            TextButton(onClick = { vm.refresh() }) {
+                                Text(stringResource(R.string.common_refresh))
+                            }
+                        }
+                        else -> BrowserItemsLayout(
+                            entries = state.items,
+                            layoutMode = layoutMode,
+                            itemKey = { it.key },
+                            bottomPadding = 24.dp,
+                            listState = listState,
+                            waterfallState = waterfallState,
+                            footer = {
+                                ListFooter(
+                                    hasMore = state.nextMarker != null,
+                                    loadingMore = state.loadingMore,
+                                    onLoadMore = { vm.loadMore() }
+                                )
+                            }
+                        ) { item, waterfall ->
+                            ObjectRow(
+                                item = item,
+                                waterfall = waterfall,
+                                highlighted = item.key == state.highlightKey,
+                                onOpen = {
+                                    if (item is OssObjectItem.Folder) vm.enterFolder(item.key)
+                                },
+                                onPreview = {
+                                    if (item is OssObjectItem.File) vm.preview(item)
+                                },
+                                onDownload = {
+                                    if (item is OssObjectItem.File) {
+                                        pendingDownload = item
+                                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                            addCategory(Intent.CATEGORY_OPENABLE)
+                                            type = "*/*"
+                                            putExtra(Intent.EXTRA_TITLE, item.displayName)
+                                        }
+                                        createFile.launch(intent)
+                                    }
+                                },
+                                onPresign = {
+                                    if (item is OssObjectItem.File) {
+                                        vm.clearCustomDomains()
+                                        dialog = BrowserDialog.ShareLink(item)
+                                    }
+                                },
+                                onDelete = {
+                                    if (settings.confirmDestructiveOps) {
+                                        dialog = BrowserDialog.ConfirmDelete(item)
+                                    } else {
+                                        vm.delete(item.key)
+                                    }
+                                },
+                                onMove = { dialog = BrowserDialog.Move(item) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -516,14 +547,6 @@ fun BrowserScreen(
             onDismiss = { dialog = null },
             onConfirm = {
                 vm.mkdir(it)
-                dialog = null
-            }
-        )
-        is BrowserDialog.NavigatePath -> NavigatePathDialog(
-            currentPrefix = state.prefix,
-            onDismiss = { dialog = null },
-            onConfirm = { path ->
-                vm.navigateToPath(path)
                 dialog = null
             }
         )
@@ -602,6 +625,7 @@ fun BrowserScreen(
             autoPlayMedia = settings.autoPlayMedia,
             onDismiss = { vm.closePreview() },
             onRetry = { vm.retryPreview() },
+            onReplaceText = vm::replaceConfirmedText,
             onDownload = {
                 val file = vm.currentPreviewItem() ?: return@PreviewDialog
                 pendingDownload = file
@@ -626,7 +650,6 @@ fun BrowserScreen(
 
 private sealed class BrowserDialog {
     data object Mkdir : BrowserDialog()
-    data object NavigatePath : BrowserDialog()
     data class ConfirmDelete(val item: OssObjectItem) : BrowserDialog()
     data class Move(val item: OssObjectItem) : BrowserDialog()
     data class ConfirmMove(
@@ -637,41 +660,190 @@ private sealed class BrowserDialog {
     data class ShareLink(val item: OssObjectItem.File) : BrowserDialog()
 }
 
+/** 路径草稿按 Bucket 和当前前缀隔离，刷新同一目录时保留未提交的输入。 */
 @Composable
-private fun Breadcrumb(
-    currentBucket: String,
+private fun BrowserDirectoryHeader(
+    bucket: String,
     prefix: String,
-    onBackToBuckets: () -> Unit,
-    onJumpInBucket: (String) -> Unit
+    layoutMode: BrowserLayoutMode,
+    onLayoutChange: (BrowserLayoutMode) -> Unit,
+    onBack: () -> Unit,
+    onSubmitPath: (String) -> Unit,
+    onUpload: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        AssistChip(
-            onClick = onBackToBuckets,
-            label = { Text("Buckets") },
-            leadingIcon = { Icon(Icons.Filled.Storage, null) }
-        )
-        Text("/")
-        AssistChip(
-            onClick = { onJumpInBucket("") },
-            label = { Text(currentBucket) }
-        )
-        if (prefix.isNotEmpty()) {
-            val parts = prefix.trimEnd('/').split('/')
-            var acc = ""
-            parts.forEach { p ->
-                acc += "$p/"
-                val target = acc
-                Text("/")
-                AssistChip(onClick = { onJumpInBucket(target) }, label = { Text(p) })
+    var path by remember(prefix) { mutableStateOf(prefix) }
+    val focusManager = LocalFocusManager.current
+    val submitPath = {
+        focusManager.clearFocus()
+        onSubmitPath(path)
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.common_back))
+            }
+            Text(
+                prefix.trimEnd('/').substringAfterLast('/').ifEmpty { bucket },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            BrowserLayoutToggle(layoutMode, onLayoutChange)
+            TextButton(onClick = onUpload) {
+                Text(stringResource(R.string.browser_upload), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+        OutlinedTextField(
+            value = path,
+            onValueChange = { path = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text(stringResource(R.string.nav_path_label)) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = { submitPath() }),
+            trailingIcon = {
+                IconButton(onClick = submitPath) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardReturn,
+                        contentDescription = stringResource(R.string.nav_path_confirm)
+                    )
+                }
+            }
+        )
+    }
+}
+
+/** 窄屏直接切换列表与瀑布流；宽屏切换详情内容，Bucket 侧栏保持列表。 */
+@Composable
+private fun BrowserLayoutToggle(
+    layoutMode: BrowserLayoutMode,
+    onLayoutChange: (BrowserLayoutMode) -> Unit
+) {
+    val next = if (layoutMode == BrowserLayoutMode.LIST) BrowserLayoutMode.WATERFALL else BrowserLayoutMode.LIST
+    IconButton(onClick = { onLayoutChange(next) }) {
+        Icon(
+            if (next == BrowserLayoutMode.LIST) Icons.Outlined.ViewList else Icons.Outlined.ViewModule,
+            contentDescription = stringResource(
+                if (next == BrowserLayoutMode.LIST) R.string.browser_layout_list else R.string.browser_layout_waterfall
+            )
+        )
+    }
+}
+
+/** 账号入口显示头像、当前名称和下箭头；菜单沿用 Apple 的供应商前缀和账号管理入口。 */
+@Composable
+private fun BrowserAccountMenu(
+    activeProfile: OssProfile?,
+    profiles: List<OssProfile>,
+    onActivate: (String) -> Unit,
+    onAdd: () -> Unit,
+    onManage: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(
+            onClick = { if (profiles.isEmpty()) onAdd() else expanded = true },
+            contentPadding = PaddingValues(horizontal = 4.dp)
+        ) {
+            val hasAccounts = profiles.isNotEmpty()
+            Icon(
+                if (hasAccounts) Icons.Outlined.AccountCircle else Icons.Outlined.PersonAdd,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                if (hasAccounts) activeProfile?.name ?: stringResource(R.string.browser_choose_account)
+                else stringResource(R.string.browser_add_account),
+                modifier = Modifier.weight(1f, fill = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (hasAccounts) {
+                Spacer(Modifier.width(5.dp))
+                Icon(
+                    Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(R.string.browser_switch_account),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            profiles.forEach { profile ->
+                val selected = profile.id == activeProfile?.id
+                val provider = if (profile.storageType == StorageType.AWS_S3) "S3" else "OSS"
+                DropdownMenuItem(
+                    text = { Text("$provider · ${profile.name}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = {
+                        Icon(
+                            if (selected) Icons.Default.Check else Icons.Outlined.VpnKey,
+                            contentDescription = if (selected) stringResource(R.string.browser_current_account) else null
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        if (!selected) onActivate(profile.id)
+                    }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.browser_manage_accounts)) },
+                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                onClick = { expanded = false; onManage() }
+            )
+        }
+    }
+}
+
+/** 宽屏左侧保留 Bucket 列表。仅有桶级权限的账号使用已经配置的 Bucket。 */
+@Composable
+private fun BrowserBucketSidebar(
+    buckets: List<OssBucketInfo>,
+    defaultBucket: String,
+    selectedBucket: String?,
+    onSelectBucket: (String, String?) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.width(224.dp),
+        contentPadding = PaddingValues(vertical = 8.dp)
+    ) {
+        item {
+            Text(
+                stringResource(R.string.browser_bucket_list_subtitle),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+        if (buckets.isEmpty() && defaultBucket.isNotBlank()) {
+            item {
+                BrowserSidebarBucket(defaultBucket, selectedBucket == defaultBucket) {
+                    onSelectBucket(defaultBucket, null)
+                }
+            }
+        }
+        items(buckets, key = { it.name }) { bucket ->
+            BrowserSidebarBucket(bucket.name, selectedBucket == bucket.name) {
+                onSelectBucket(bucket.name, bucket.extranetEndpoint)
+            }
+        }
+    }
+}
+
+/** 当前 Bucket 由勾选图标标出，重复点击保留正在浏览的路径。 */
+@Composable
+private fun BrowserSidebarBucket(name: String, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().selectable(selected = selected, role = Role.Tab) {
+            if (!selected) onSelect()
+        }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(if (selected) Icons.Default.Check else Icons.Default.Storage, contentDescription = null)
+        Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -765,11 +937,6 @@ private fun ObjectRow(
                 Spacer(Modifier.weight(1f))
             } else {
                 ObjectItemDescription(item, Modifier.weight(1f).padding(horizontal = 12.dp))
-                if (item is OssObjectItem.File) {
-                    IconButton(onClick = onPreview) {
-                        Icon(Icons.Outlined.Visibility, contentDescription = stringResource(R.string.cd_preview))
-                    }
-                }
             }
             Box {
                 IconButton(onClick = { moreMenuOpen = true }) {
@@ -919,44 +1086,6 @@ private fun EmptyHint(text: String, action: (@Composable () -> Unit)? = null) {
             action?.invoke()
         }
     }
-}
-
-@Composable
-private fun NavigatePathDialog(
-    currentPrefix: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var path by remember { mutableStateOf(currentPrefix) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.nav_path_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = path,
-                    onValueChange = { path = it },
-                    label = { Text(stringResource(R.string.nav_path_label)) },
-                    placeholder = { Text(stringResource(R.string.nav_path_placeholder)) },
-                    singleLine = false,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    stringResource(R.string.nav_path_help),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(path) }) {
-                Text(stringResource(R.string.nav_path_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-        }
-    )
 }
 
 @Composable
@@ -1301,7 +1430,8 @@ private fun PreviewDialog(
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
     onDownload: () -> Unit,
-    onPresign: () -> Unit
+    onPresign: () -> Unit,
+    onReplaceText: (PreviewState.Text, String) -> Unit
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -1311,10 +1441,31 @@ private fun PreviewDialog(
     }
     // 完整网页能力只对当前文件的本次预览有效；关闭或切换文件后恢复安全静态模式。
     var fullHtmlPreview by remember(state.key) { mutableStateOf(false) }
+    var showHtmlSource by remember(state.key) { mutableStateOf(false) }
     var showFullHtmlConfirmation by remember(state.key) { mutableStateOf(false) }
 
+    val textState = state as? PreviewState.Text
+    // 对象、版本或已保存正文变更时清空草稿，保存进度和失败状态更新时保留。
+    val version = listOf(
+        state.key, textState?.profileId, textState?.bucket, textState?.endpoint, textState?.etag, textState?.content
+    )
+    var editUnavailable by remember(version) { mutableStateOf<Int?>(null) }
+    var draft by remember(version) { mutableStateOf<String?>(null) }
+    var textDiff by remember(version) { mutableStateOf<List<String>>(emptyList()) }
+    val leaveEditor = {
+        if (textState?.saving != true) {
+            if (textDiff.isNotEmpty()) {
+                textDiff = emptyList()
+            } else if (draft != null) {
+                draft = null
+            } else {
+                onDismiss()
+            }
+        }
+    }
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = leaveEditor,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
@@ -1335,7 +1486,7 @@ private fun PreviewDialog(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onDismiss) {
+                        IconButton(onClick = leaveEditor, enabled = textState?.saving != true) {
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = stringResource(R.string.common_close)
@@ -1345,6 +1496,25 @@ private fun PreviewDialog(
                     actions = {
                         when (state) {
                             is PreviewState.Text -> {
+                                val currentDraft = draft
+                                when {
+                                    state.saving -> CircularProgressIndicator(Modifier.size(24.dp))
+                                    textDiff.isNotEmpty() && currentDraft != null -> TextButton(
+                                        onClick = { onReplaceText(state, currentDraft) }
+                                    ) { Text(stringResource(R.string.preview_edit_confirm)) }
+                                    currentDraft != null -> TextButton(
+                                        enabled = currentDraft != state.content,
+                                        onClick = { textDiff = compareTextEditLines(state.content, currentDraft) }
+                                    ) { Text(stringResource(R.string.preview_edit_diff)) }
+                                    else -> TextButton(onClick = {
+                                        when {
+                                            state.encoding == null -> editUnavailable = R.string.preview_edit_encoding
+                                            state.etag == null -> editUnavailable = R.string.preview_edit_missing_version
+                                            else -> draft = state.content
+                                        }
+                                    }) { Text(stringResource(R.string.preview_edit_open)) }
+                                }
+                                if (currentDraft != null) return@AppTopBar
                                 if (state.isMarkdown) {
                                     val switchDesc = if (renderMarkdown) {
                                         stringResource(R.string.preview_toggle_markdown_source)
@@ -1371,6 +1541,16 @@ private fun PreviewDialog(
                                 }
                             }
                             is PreviewState.Html -> {
+                                IconButton(onClick = { showHtmlSource = !showHtmlSource }) {
+                                    Icon(
+                                        imageVector = if (showHtmlSource) Icons.AutoMirrored.Outlined.Article
+                                        else Icons.Outlined.Code,
+                                        contentDescription = stringResource(
+                                            if (showHtmlSource) R.string.preview_html_show_page
+                                            else R.string.preview_html_show_source
+                                        )
+                                    )
+                                }
                                 IconButton(onClick = {
                                     if (fullHtmlPreview) {
                                         fullHtmlPreview = false
@@ -1489,17 +1669,23 @@ private fun PreviewDialog(
                     when (state) {
                         is PreviewState.Loading -> LoadingPreviewBody(state)
 
-                        is PreviewState.Text ->
-                            if (state.isMarkdown && renderMarkdown) {
-                                MarkdownPreviewBody(content = state.content)
-                            } else {
-                                TextPreviewBody(content = state.content)
-                            }
+                        is PreviewState.Text -> when {
+                            textDiff.isNotEmpty() -> TextEditReviewBody(textDiff, state)
+                            draft != null -> OutlinedTextField(
+                                value = draft.orEmpty(),
+                                onValueChange = { draft = it },
+                                modifier = Modifier.fillMaxSize().padding(12.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                            )
+                            state.isMarkdown && renderMarkdown -> MarkdownPreviewBody(content = state.content)
+                            else -> TextPreviewBody(content = state.content)
+                        }
 
-                        is PreviewState.Html -> HtmlPreviewBody(
-                            content = state.content,
-                            fullWebPreview = fullHtmlPreview
-                        )
+                        is PreviewState.Html -> if (showHtmlSource) {
+                            HtmlSourcePreviewBody(content = state.content)
+                        } else {
+                            HtmlPreviewBody(content = state.content, fullWebPreview = fullHtmlPreview)
+                        }
 
                         is PreviewState.Docx -> DocxPreviewBody(paragraphs = state.paragraphs)
 
@@ -1537,6 +1723,17 @@ private fun PreviewDialog(
         }
     }
 
+    editUnavailable?.let { reason ->
+        AlertDialog(
+            onDismissRequest = { editUnavailable = null },
+            title = { Text(stringResource(R.string.preview_edit_open)) },
+            text = { Text(stringResource(reason)) },
+            confirmButton = {
+                TextButton(onClick = { editUnavailable = null }) { Text(stringResource(R.string.common_close)) }
+            }
+        )
+    }
+
     if (showFullHtmlConfirmation) {
         AlertDialog(
             onDismissRequest = { showFullHtmlConfirmation = false },
@@ -1545,6 +1742,7 @@ private fun PreviewDialog(
             confirmButton = {
                 TextButton(onClick = {
                     fullHtmlPreview = true
+                    showHtmlSource = false
                     showFullHtmlConfirmation = false
                 }) {
                     Text(stringResource(R.string.preview_html_enable_full))
@@ -1556,6 +1754,33 @@ private fun PreviewDialog(
                 }
             }
         )
+    }
+}
+
+/** 确认页按行显示新增和删除；写入失败时保留草稿及差异。 */
+@Composable
+private fun TextEditReviewBody(lines: List<String>, target: PreviewState.Text) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
+        item {
+            Text(stringResource(R.string.preview_edit_review_message))
+            Text("${target.bucket}/${target.key}", fontFamily = FontFamily.Monospace)
+            if (target.usesOSS) {
+                Text(stringResource(R.string.preview_edit_oss_concurrency))
+            }
+            Text(stringResource(R.string.preview_edit_acl))
+            target.saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+        items(lines.size) { index ->
+            val line = lines[index]
+            val color = when {
+                line.startsWith("-") -> MaterialTheme.colorScheme.error
+                line.startsWith("+") -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurface
+            }
+            SelectionContainer {
+                Text(line, color = color, fontFamily = FontFamily.Monospace)
+            }
+        }
     }
 }
 
@@ -1591,6 +1816,31 @@ private fun MarkdownPreviewBody(content: String) {
             MarkdownText(source = content)
         }
     }
+}
+
+/** 使用原生只读文本控件显示已下载源码，不创建 WebView，也不再次下载文件。 */
+@Composable
+private fun HtmlSourcePreviewBody(content: String) {
+    val foreground = MaterialTheme.colorScheme.onSurface.toArgb()
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = { context ->
+            ScrollView(context).apply {
+                isFillViewport = true
+                addView(TextView(context).apply {
+                    typeface = Typeface.MONOSPACE
+                    setTextIsSelectable(true)
+                    val padding = (12 * resources.displayMetrics.density).toInt()
+                    setPadding(padding, padding, padding, padding)
+                    text = content
+                })
+            }
+        },
+        update = { container ->
+            val source = container.getChildAt(0) as TextView
+            source.setTextColor(foreground)
+        }
+    )
 }
 
 /**
